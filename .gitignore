@@ -59,6 +59,10 @@ data/processed/*
 datasets/*/*
 !datasets/*/.gitkeep
 
+# Benchmark public datasets (large, downloaded locally, never committed)
+benchmark/datasets/*
+!benchmark/datasets/.gitkeep
+
 # Environment variables
 .env
 
