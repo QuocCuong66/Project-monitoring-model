@@ -25,7 +25,7 @@ from src.risk.threshold_manager import ThresholdManager
 from src.alerts.alert_manager import AlertManager, AlertEvent
 from src.detection.motion_gater import MotionGater, MotionGateResult
 from src.utils.visualizer import PipelineVisualizer
-from src.utils.privacy import FaceBlurrer
+from src.utils.privacy import FaceBlurrer, anonymize_alert_snapshot
 from src.utils.profiler import LatencyProfiler, ResourceMonitor
 from src.utils.config import load_config
 
@@ -345,6 +345,14 @@ class RealtimePipeline:
             pose_dict = {p.track_id: p for p in poses}
             self.profiler.stop("pose")
 
+        # Fall-clip pre-roll (heads pixelated from this frame's detections + tracks)
+        self.alert_manager.record_frame(
+            frame,
+            timestamp,
+            [(None, d.bbox) for d in detections]
+            + [(pose_dict[t.track_id].keypoints if t.track_id in pose_dict else None, t.bbox) for t in active_tracks],
+        )
+
         # STAGE 4 & 5: Temporal Sequence Buffer & Cascade / Gated AI Reasoning
         self.profiler.start("temporal_reasoning")
         assessments: List[RiskAssessment] = []
@@ -411,14 +419,17 @@ class RealtimePipeline:
                 assessments.append(assessment)
 
                 # STAGE 6: Alert Dispatching
-                # If high-risk confirmed, prepare anonymized snapshot
+                # If high-risk confirmed, prepare the snapshot with every visible head pixelated
+                # (always, independent of the live-view blur toggle)
                 snapshot_frame = None
                 if assessment.should_alert:
-                    snapshot_frame = frame.copy()
-                    if self.blur_faces and pose is not None:
-                        snapshot_frame = self.face_blurrer.blur_keypoints_face(snapshot_frame, pose.keypoints)
-                    elif self.blur_faces:
-                        snapshot_frame = self.face_blurrer.blur_bbox_head(snapshot_frame, track.bbox)
+                    snapshot_frame = anonymize_alert_snapshot(
+                        frame,
+                        detections=[(None, d.bbox) for d in detections],
+                        tracks=[(pose_dict[t.track_id].keypoints if t.track_id in pose_dict else None, t.bbox)
+                                for t in active_tracks],
+                        alerted_bbox=track.bbox,
+                    )
 
                 alert_evt = self.alert_manager.process_assessment(
                     assessment=assessment,

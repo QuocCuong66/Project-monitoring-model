@@ -3,12 +3,12 @@
 import json
 import time
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import cv2
 import numpy as np
-from src.utils.config import get_project_root
+from src.utils.config import get_project_root, load_config
 
 
 @dataclass
@@ -21,23 +21,65 @@ class AlertEvent:
     risk_score: float
     evidence: Dict[str, Any]
     snapshot_path: Optional[str] = None
+    clip_path: Optional[str] = None  # anonymized fall clip; the file appears a few seconds after the alert
     message: str = "Possible medical emergency / abnormal behavior detected. Please check the person."
 
 
 class EventLogger:
     """Manages local, encrypted or anonymized JSON event logging."""
 
-    def __init__(self, log_dir: Optional[Union[str, Path]] = None, retention_days: int = 7) -> None:
+    def __init__(
+        self,
+        log_dir: Optional[Union[str, Path]] = None,
+        retention_days: Optional[float] = None,
+        save_snapshots: Optional[bool] = None,
+    ) -> None:
         if log_dir is None:
             self.log_dir = get_project_root() / "data" / "processed" / "events"
         else:
             self.log_dir = Path(log_dir)
 
+        privacy_cfg: Dict[str, Any] = {}
+        try:
+            privacy_cfg = (load_config("inference.yaml") or {}).get("privacy", {}) or {}
+        except Exception:
+            pass
+        self.retention_days = float(retention_days if retention_days is not None else privacy_cfg.get("retention_days", 7))
+        self.save_snapshots = bool(save_snapshots if save_snapshots is not None else privacy_cfg.get("save_snapshots", True))
+
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.snapshots_dir = self.log_dir / "snapshots"
         self.snapshots_dir.mkdir(parents=True, exist_ok=True)
-        self.retention_days = retention_days
         self.jsonl_file = self.log_dir / "events.jsonl"
+        self.purge_expired()
+
+    def purge_expired(self, now: Optional[float] = None) -> int:
+        """Delete snapshots and event records older than retention_days. Returns files removed."""
+        if self.retention_days <= 0:
+            return 0
+        cutoff = (now if now is not None else time.time()) - self.retention_days * 86400.0
+        removed = 0
+        for img in self.snapshots_dir.glob("*.jpg"):
+            try:
+                if img.stat().st_mtime < cutoff:
+                    img.unlink()
+                    removed += 1
+            except OSError:
+                pass
+        if self.jsonl_file.exists():
+            kept: List[str] = []
+            with open(self.jsonl_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        ts = json.loads(line)["timestamp"].rstrip("Z")
+                        if datetime.fromisoformat(ts).replace(tzinfo=timezone.utc).timestamp() < cutoff:
+                            continue
+                    except (ValueError, KeyError, TypeError):
+                        pass
+                    kept.append(line)
+            with open(self.jsonl_file, "w", encoding="utf-8") as f:
+                f.writelines(kept)
+        return removed
 
     def log_event(
         self,
@@ -45,6 +87,7 @@ class EventLogger:
         risk_score: float,
         evidence: Dict[str, Any],
         frame: Optional[np.ndarray] = None,
+        clip_path: Optional[str] = None,
     ) -> AlertEvent:
         """Create, record, and persist a new emergency alert event.
 
@@ -52,7 +95,10 @@ class EventLogger:
             person_id: Track ID of the person.
             risk_score: Calculated risk severity score.
             evidence: Dictionary of kinematic and action signals.
-            frame: Optional BGR frame to save as blurred evidence snapshot.
+            frame: Optional BGR evidence frame. Callers must pass an already anonymized
+                frame (src.utils.privacy.anonymize_people); it is saved only when
+                privacy.save_snapshots is enabled.
+            clip_path: Evidence clip being recorded for this event (falls only), if any.
 
         Returns:
             AlertEvent dataclass instance.
@@ -62,7 +108,7 @@ class EventLogger:
         event_id = f"evt_{now.strftime('%Y%m%d_%H%M%S')}_trk{person_id}"
 
         snapshot_rel_path = None
-        if frame is not None:
+        if frame is not None and self.save_snapshots:
             filename = f"{event_id}.jpg"
             save_path = self.snapshots_dir / filename
             cv2.imwrite(str(save_path), frame)
@@ -76,12 +122,14 @@ class EventLogger:
             risk_score=round(risk_score, 3),
             evidence=evidence,
             snapshot_path=snapshot_rel_path,
+            clip_path=clip_path,
         )
 
         # Append to JSONL log
         with open(self.jsonl_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(asdict(event)) + "\n")
 
+        self.purge_expired()
         return event
 
     def get_recent_events(self, limit: int = 50) -> List[Dict[str, Any]]:
@@ -101,7 +149,9 @@ class EventLogger:
         return events[-limit:]
 
     def clear_events(self) -> None:
-        """Clear all historical logged events and reset JSONL log."""
+        """Clear all historical logged events, their snapshots and clips, and reset JSONL log."""
+        for evt in self.get_recent_events(limit=10**9):
+            self._remove_media(evt)
         if self.jsonl_file.exists():
             try:
                 self.jsonl_file.unlink()
@@ -125,15 +175,7 @@ class EventLogger:
                     data = json.loads(line)
                     if data.get("event_id") == event_id:
                         found = True
-                        # Remove snapshot if exists
-                        snapshot_path = data.get("snapshot_path")
-                        if snapshot_path:
-                            try:
-                                snap_full = get_project_root() / snapshot_path
-                                if snap_full.exists():
-                                    snap_full.unlink()
-                            except Exception:
-                                pass
+                        self._remove_media(data)
                         continue
                     remaining_events.append(data)
                 except json.JSONDecodeError:
@@ -144,3 +186,20 @@ class EventLogger:
                 for ev in remaining_events:
                     f.write(json.dumps(ev) + "\n")
         return found
+
+    @staticmethod
+    def _remove_media(event: Dict[str, Any]) -> None:
+        """Delete the snapshot and clip files that belong to an event record."""
+        from src.alerts.clip_recorder import find_clip_file
+
+        files = []
+        if event.get("snapshot_path"):
+            files.append(get_project_root() / event["snapshot_path"])
+        clip = find_clip_file(event.get("clip_path"))
+        if clip is not None:
+            files.append(clip)
+        for path in files:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass

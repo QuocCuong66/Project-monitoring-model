@@ -11,14 +11,15 @@ from typing import Any, Dict, List, Optional
 import cv2
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src.pipeline.realtime_pipeline import RealtimePipeline
 from src.camera.webcam import WebcamStream
-from src.camera.rtsp import RTSPStream
+from src.camera.rtsp import RTSPStream, build_stream_url, mask_url, probe_stream, validate_stream_url
 from src.camera.video_file import VideoFileStream
 from src.camera.camera_settings import save_user_camera_settings
+from src.alerts.clip_recorder import find_clip_file
 from src.alerts.event_logger import EventLogger, AlertEvent
 from src.alerts.telegram import TelegramSettings
 from src.api import telegram_routes
@@ -91,11 +92,35 @@ class CameraStartRequest(BaseModel):
 
 
 class CameraSwitchRequest(BaseModel):
-    source_type: str = "webcam"  # "webcam", "rtsp", "video"
+    source_type: str = "webcam"  # "webcam", "rtsp" (any network / remote camera), "video"
     device_index: int = 0
     rtsp_url: Optional[str] = None
+    # Optional separate credentials, percent-encoded into the URL (passwords with @ : # /)
+    rtsp_username: Optional[str] = None
+    rtsp_password: Optional[str] = None
     video_path: Optional[str] = None
     save_as_default: bool = False
+
+
+class CameraTestRequest(BaseModel):
+    rtsp_url: str
+    rtsp_username: Optional[str] = None
+    rtsp_password: Optional[str] = None
+
+
+def _resolve_stream_url(url: Optional[str], username: Optional[str], password: Optional[str]) -> str:
+    full = build_stream_url(url or "", username, password)
+    error = validate_stream_url(full)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return full
+
+
+def _connection_status() -> Optional[Dict[str, Any]]:
+    stream = camera_stream
+    if stream is not None and hasattr(stream, "connection_status"):
+        return stream.connection_status()
+    return None
 
 
 def probe_available_webcams(max_probe: int = 4) -> List[Dict[str, Any]]:
@@ -246,6 +271,7 @@ def system_status() -> Dict[str, Any]:
         "camera_active": running,
         "current_fps": round(fps, 1),
         "tracked_persons_count": tracks_count,
+        "camera_connection": _connection_status(),  # network cameras only (state / reconnect attempts)
         "timestamp": time.time(),
     }
 
@@ -269,6 +295,7 @@ def get_camera_info() -> Dict[str, Any]:
             "is_active": active,
             "fps": round(fps, 1),
             "resolution": f"{w}x{h}" if w > 0 and h > 0 else "1280x720",
+            "connection": _connection_status(),
         })
     return info
 
@@ -277,7 +304,6 @@ def get_camera_info() -> Dict[str, Any]:
 def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
     """Dynamically switch camera source (Webcam, RTSP, Video) without breaking server."""
     global camera_stream, pipeline_instance, is_running, current_camera_info
-    import re
 
     # Validate inputs
     if req.source_type == "rtsp":
@@ -286,7 +312,8 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
                 status_code=400,
                 detail="Vui lòng nhập đường dẫn RTSP Stream URL hợp lệ (ví dụ: rtsp://admin:pass@192.168.1.100:554/stream)."
             )
-        req.rtsp_url = req.rtsp_url.strip()
+        req.rtsp_url = _resolve_stream_url(req.rtsp_url, req.rtsp_username, req.rtsp_password)
+        req.rtsp_username = req.rtsp_password = None  # now inside the URL; never echoed back separately
     elif req.source_type == "video":
         if not req.video_path or not req.video_path.strip():
             req.video_path = "data/videos/sample_adl_fall.mp4"
@@ -312,9 +339,8 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
                 new_stream = WebcamStream(device_index=req.device_index, api_preference=api_pref)
                 friendly_name = f"Webcam {req.device_index}"
             elif req.source_type == "rtsp":
-                new_stream = RTSPStream(url=req.rtsp_url)
-                masked_url = re.sub(r"://([^:]+):([^@]+)@", r"://\1:****@", req.rtsp_url)
-                friendly_name = f"RTSP ({masked_url})"
+                new_stream = RTSPStream.from_config(req.rtsp_url)
+                friendly_name = f"IP Camera ({mask_url(req.rtsp_url)})"
             elif req.source_type == "video":
                 new_stream = VideoFileStream(video_path=req.video_path, loop=True)
                 friendly_name = f"Video ({Path(req.video_path).name})"
@@ -327,7 +353,7 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
                 if req.source_type == "rtsp":
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Không thể kết nối đến Camera RTSP tại '{req.rtsp_url}'. Vui lòng kiểm tra địa chỉ IP, cổng mạng hoặc tài khoản đăng nhập."
+                        detail=f"Không thể kết nối đến camera tại '{mask_url(req.rtsp_url)}'. Vui lòng kiểm tra địa chỉ IP/tên miền, cổng (port forwarding/VPN) hoặc tài khoản đăng nhập."
                     )
                 else:
                     # Fallback to synthetic if hardware webcam fails
@@ -399,9 +425,20 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
             raise HTTPException(status_code=500, detail=f"Lỗi khi chuyển đổi camera: {str(e)}")
 
 
+@app.post("/camera/test")
+def test_camera_connection(req: CameraTestRequest) -> Dict[str, Any]:
+    """Try a network / remote camera URL (one frame) without switching the active camera."""
+    url = _resolve_stream_url(req.rtsp_url, req.rtsp_username, req.rtsp_password)
+    result = probe_stream(url)
+    result["url"] = mask_url(url)
+    return result
+
+
 @app.post("/camera/save-config")
 def save_camera_configuration(req: CameraSwitchRequest) -> Dict[str, Any]:
     """Save the selected camera setup as the per-user default (%APPDATA%)."""
+    if req.source_type == "rtsp":
+        req.rtsp_url = _resolve_stream_url(req.rtsp_url, req.rtsp_username, req.rtsp_password)
     success = save_camera_config_to_yaml(req.dict())
     if success:
         return {"status": "success", "message": "Đã lưu camera mặc định. Lần sau mở ứng dụng sẽ tự dùng camera này."}
@@ -631,10 +668,32 @@ def _jpeg_encoder_loop() -> None:
 
 
 
+def _with_clip_status(evt: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(evt)
+    out["clip_available"] = find_clip_file(evt.get("clip_path")) is not None
+    return out
+
+
 @app.get("/events")
 def list_events(limit: int = 50) -> List[Dict[str, Any]]:
-    """Fetch recent historical emergency alerts."""
-    return event_logger.get_recent_events(limit=limit)
+    """Fetch recent historical emergency alerts (clip_available: the fall clip can be played)."""
+    return [_with_clip_status(e) for e in event_logger.get_recent_events(limit=limit)]
+
+
+@app.get("/events/{event_id}/clip")
+def get_event_clip(event_id: str):
+    """Play the anonymized fall clip of an event (404 while still recording, or after expiry)."""
+    for evt in event_logger.get_recent_events(limit=10**9):
+        if evt.get("event_id") == event_id:
+            clip = find_clip_file(evt.get("clip_path"))
+            clips_root = (event_logger.log_dir / "clips").resolve()
+            if clip is None or clips_root not in clip.resolve().parents:
+                if evt.get("clip_path"):
+                    raise HTTPException(status_code=404, detail="Đoạn video đang được ghi hoặc đã hết hạn lưu trữ (7 ngày).")
+                raise HTTPException(status_code=404, detail="Sự kiện này không có đoạn video (chỉ lưu video khi té ngã).")
+            media = "video/webm" if clip.suffix == ".webm" else "video/mp4"
+            return FileResponse(str(clip), media_type=media)
+    raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
 
 
 @app.get("/events/{event_id}")
@@ -643,7 +702,7 @@ def get_event(event_id: str) -> Dict[str, Any]:
     events = event_logger.get_recent_events(limit=200)
     for evt in events:
         if evt.get("event_id") == event_id:
-            return evt
+            return _with_clip_status(evt)
     raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
 @app.post("/events/clear")
 @app.delete("/events")

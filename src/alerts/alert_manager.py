@@ -1,8 +1,9 @@
 """Alert Manager orchestrating event cooldowns, deduplication, and dispatch."""
 
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 import numpy as np
+from src.alerts.clip_recorder import EventClipRecorder, Person
 from src.alerts.event_logger import EventLogger, AlertEvent
 from src.alerts.notification import NotificationDispatcher
 from src.risk.risk_engine import RiskAssessment
@@ -17,11 +18,23 @@ class AlertManager:
         thresholds: Optional[ThresholdManager] = None,
         logger: Optional[EventLogger] = None,
         dispatcher: Optional[NotificationDispatcher] = None,
+        clip_recorder: Optional[EventClipRecorder] = None,
     ) -> None:
         self.thresholds = thresholds or ThresholdManager()
         self.logger = logger or EventLogger()
         self.dispatcher = dispatcher or NotificationDispatcher()
+        self.clip_recorder = clip_recorder if clip_recorder is not None else EventClipRecorder(
+            clips_dir=self.logger.log_dir / "clips"
+        )
         self._last_alert_timestamps: Dict[int, float] = {}
+        self._last_maintenance = time.time()
+
+    def record_frame(self, frame: np.ndarray, timestamp: float, people: List[Person]) -> None:
+        """Feed every camera frame: buffers the clip pre-roll and runs hourly retention cleanup."""
+        self.clip_recorder.add_frame(frame, timestamp, people)
+        if timestamp - self._last_maintenance >= self.clip_recorder.maintenance_interval_s:
+            self._last_maintenance = timestamp
+            self.logger.purge_expired()
 
     def process_assessment(
         self,
@@ -53,12 +66,16 @@ class AlertManager:
 
         self._last_alert_timestamps[tid] = curr_time
 
-        # 1. Log event and save blurred snapshot
+        # 1. Start the evidence clip (falls only), log event and save anonymized snapshot
+        clip_path = None
+        if self.clip_recorder is not None and self.clip_recorder.is_fall(assessment.evidence):
+            clip_path = self.clip_recorder.start_clip(tid, curr_time)
         event = self.logger.log_event(
             person_id=tid,
             risk_score=assessment.risk_score,
             evidence=assessment.evidence,
             frame=frame,
+            clip_path=clip_path,
         )
 
         # 2. Dispatch notifications across external channels

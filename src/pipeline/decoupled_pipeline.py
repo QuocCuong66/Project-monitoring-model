@@ -34,6 +34,7 @@ from src.risk.threshold_manager import ThresholdManager
 from src.alerts.alert_manager import AlertManager, AlertEvent
 from src.detection.motion_gater import MotionGater, MotionGateResult
 from src.utils.visualizer import PipelineVisualizer
+from src.utils.privacy import anonymize_alert_snapshot, anonymize_people
 from src.utils.profiler import LatencyProfiler, ResourceMonitor
 from src.utils.config import load_config, resolve_model_path
 
@@ -144,6 +145,8 @@ class DecoupledPipeline:
         # gate hold-on timers and kinematic features are calibrated for 15 Hz sampling.
         self.temporal_hz = float(sched_cfg.get("temporal_hz", 15.0))
         self.gated_ai = bool(sched_cfg.get("enable_gated_ai", True))
+        # Live-view face blur (toggled from Settings via /api/camera/blur); alert snapshots are always anonymized
+        self.blur_faces = bool(infer_cfg.get("privacy", {}).get("blur_faces", False))
         self._temporal_period = 1.0 / max(1e-3, self.temporal_hz)
 
         # GPU = an onnxruntime GPU provider (DirectML in the app build) or a working torch CUDA.
@@ -288,6 +291,8 @@ class DecoupledPipeline:
         self._last_temporal_ts: float = 0.0
         self._temporal_tick_count = 0
         self._last_assessments: Dict[int, RiskAssessment] = {}
+        # (keypoints, bbox) of everyone in the last perceived frame, for anonymizing clip frames
+        self._last_people: List[Tuple[Optional[np.ndarray], Tuple[float, float, float, float]]] = []
 
     def start(self) -> None:
         """Start background AI inference thread."""
@@ -358,6 +363,8 @@ class DecoupledPipeline:
                     "ai_bypassed": True,
                 }
             )
+            # Static scene: keep the fall-clip pre-roll going, masking heads at their last known spots
+            self.alert_manager.record_frame(packet.frame, packet.timestamp, self._last_people)
             time.sleep(1.0 / self.motion_gater.idle_fps)
             return
 
@@ -450,6 +457,12 @@ class DecoupledPipeline:
                     )
                     self.sequence_buffer.add_snapshot(tid, snapshot)
 
+        # 3.5. Fall-clip pre-roll: heads pixelated from this exact frame's raw detections + tracks
+        self._last_people = [(it.keypoints, it.bbox) for it in single_pass_items] + [
+            (poses_dict[t.track_id].keypoints if t.track_id in poses_dict else None, t.bbox) for t in active_tracks
+        ]
+        self.alert_manager.record_frame(packet.frame, packet.timestamp, self._last_people)
+
         # 4. Cascade / Gated Temporal Reasoning & Risk Evaluation
         assessments: List[RiskAssessment] = []
         alerts_raised: List[AlertEvent] = []
@@ -512,10 +525,20 @@ class DecoupledPipeline:
                 )
                 assessments.append(assessment)
 
-                # Cooldown-deduplicated alert check
+                # Cooldown-deduplicated alert check. The evidence snapshot is always
+                # anonymized (every visible head pixelated) before it is saved or sent.
+                snapshot = None
+                if assessment.should_alert:
+                    snapshot = anonymize_alert_snapshot(
+                        packet.frame,
+                        detections=[(it.keypoints, it.bbox) for it in single_pass_items],
+                        tracks=[(poses_dict[t.track_id].keypoints if t.track_id in poses_dict else None, t.bbox)
+                                for t in active_tracks],
+                        alerted_bbox=track.bbox,
+                    )
                 alert = self.alert_manager.process_assessment(
                     assessment=assessment,
-                    frame=packet.frame,
+                    frame=snapshot,
                     timestamp=packet.timestamp,
                 )
                 if alert is not None:
@@ -541,8 +564,13 @@ class DecoupledPipeline:
         self.render_profiler.start_frame()
         tracks, poses, assessments, ai_fps = self.shared_state.get_render_data(timestamp)
 
-        annotated = frame.copy()
         pose_dict = {p.track_id: p for p in poses}
+        if self.blur_faces:
+            annotated = anonymize_people(
+                frame, [(pose_dict[t.track_id].keypoints if t.track_id in pose_dict else None, t.bbox) for t in tracks]
+            )
+        else:
+            annotated = frame.copy()
         risk_dict = {a.track_id: a for a in assessments}
 
         has_emergency = False

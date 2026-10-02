@@ -156,7 +156,7 @@
                         <label for="camera-type-select" class="cam-field-label">Loại Nguồn:</label>
                         <select id="camera-type-select" class="cam-select">
                           <option value="webcam">📷 Webcam Tích hợp / USB</option>
-                          <option value="rtsp">🌐 Camera IP An Ninh (RTSP)</option>
+                          <option value="rtsp">🌐 Camera IP / Camera ở xa (RTSP, HTTP, RTMP)</option>
                           <option value="video">🎬 Tệp Video Kiểm Thử (MP4)</option>
                         </select>
                       </div>
@@ -180,6 +180,9 @@
                           <option value="yoosee">Yoosee</option>
                           <option value="tapo">TP-Link Tapo</option>
                           <option value="ezviz">EZVIZ</option>
+                          <option value="ddns">Camera ở xa qua tên miền DDNS</option>
+                          <option value="vpn">Camera ở xa qua VPN (Tailscale/ZeroTier)</option>
+                          <option value="http_mjpeg">Điện thoại / HTTP MJPEG (IP Webcam)</option>
                         </select>
                       </div>
 
@@ -194,8 +197,16 @@
                     </div>
 
                     <div class="cam-full-row" id="group-rtsp-url-row" style="display: none;">
-                      <label for="rtsp-url-input" class="cam-field-label">Đường dẫn RTSP Stream:</label>
-                      <input type="text" id="rtsp-url-input" class="cam-input" placeholder="rtsp://admin:pass@192.168.1.100:554/stream" spellcheck="false">
+                      <label for="rtsp-url-input" class="cam-field-label">Đường dẫn camera (rtsp://, http://, rtmp://):</label>
+                      <div class="cam-input-action-row">
+                        <input type="text" id="rtsp-url-input" class="cam-input" placeholder="rtsp://192.168.1.100:554/stream1 hoặc rtsp://tenmien.ddns.net:554/stream1" spellcheck="false">
+                        <button type="button" class="btn-cam-action" id="btn-test-rtsp">Kiểm tra</button>
+                      </div>
+                      <div class="cam-input-action-row">
+                        <input type="text" id="rtsp-username-input" class="cam-input" placeholder="Tài khoản (tùy chọn)" autocomplete="off" spellcheck="false">
+                        <input type="password" id="rtsp-password-input" class="cam-input" placeholder="Mật khẩu (tùy chọn)" autocomplete="new-password">
+                      </div>
+                      <div class="cam-field-hint">Nhập tài khoản/mật khẩu riêng nếu mật khẩu có ký tự đặc biệt (@ : # /). Camera ở xa: dùng tên miền DDNS + mở cổng trên router, hoặc an toàn hơn là VPN (Tailscale/ZeroTier). Hệ thống tự kết nối lại khi mạng chập chờn.</div>
                     </div>
 
                     <div class="cam-full-row" id="group-video-custom-row" style="display: none;">

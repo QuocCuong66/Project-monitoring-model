@@ -1675,3 +1675,45 @@ input:checked + .slider:before {
     flex-direction: column;
   }
 }
+
+/* Remote camera form hint */
+.cam-field-hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* Fall clip playback inside an alert card */
+.alert-item-clip-row {
+  margin-top: 8px;
+}
+
+.btn-alert-clip {
+  background: var(--accent-blue-subtle);
+  border: 1px solid #bfdbfe;
+  color: var(--accent-blue);
+  border-radius: var(--radius-xs);
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-alert-clip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.alert-item-clip {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  margin-top: 8px;
+  border-radius: var(--radius-xs);
+  background: #000;
+}
+
+.alert-item-clip-note {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}

@@ -49,6 +49,9 @@
   const elRtspPresetSelect = document.getElementById("rtsp-preset-select");
   const elGroupRtspUrlRow = document.getElementById("group-rtsp-url-row");
   const elRtspUrlInput = document.getElementById("rtsp-url-input");
+  const elRtspUsernameInput = document.getElementById("rtsp-username-input");
+  const elRtspPasswordInput = document.getElementById("rtsp-password-input");
+  const elBtnTestRtsp = document.getElementById("btn-test-rtsp");
 
   const elGroupVideoPreset = document.getElementById("group-video-preset");
   const elVideoPresetSelect = document.getElementById("video-preset-select");
@@ -437,6 +440,50 @@
     if (elTotalAlerts) elTotalAlerts.textContent = alertCount;
   }
 
+  // Fall clips are recorded for a few seconds after the alert, then kept for 7 days at most
+  async function toggleAlertClip(card, eventId, btn) {
+    const row = btn.parentElement;
+    const existing = row.querySelector(".alert-item-clip, .alert-item-clip-note");
+    if (existing) {
+      row.querySelectorAll(".alert-item-clip, .alert-item-clip-note").forEach((el) => el.remove());
+      btn.textContent = "▶ Xem đoạn video té ngã";
+      return;
+    }
+    const url = `${API_BASE}/events/${encodeURIComponent(eventId)}/clip`;
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/events/${encodeURIComponent(eventId)}`);
+      const info = res.ok ? await res.json() : null;
+      if (!info || !info.clip_available) {
+        const msg = info
+          ? "Đoạn video đang được ghi (hoặc đã hết hạn lưu 7 ngày). Vui lòng thử lại sau vài giây."
+          : "Không tìm thấy sự kiện này trên máy chủ.";
+        const note = document.createElement("div");
+        note.className = "alert-item-clip-note";
+        note.textContent = msg;
+        row.appendChild(note);
+        return;
+      }
+      const video = document.createElement("video");
+      video.className = "alert-item-clip";
+      video.src = url;
+      video.controls = true;
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      row.appendChild(video);
+      const note = document.createElement("div");
+      note.className = "alert-item-clip-note";
+      note.textContent = "Khuôn mặt đã được làm mờ. Video tự động xóa sau 7 ngày.";
+      row.appendChild(note);
+      btn.textContent = "✕ Đóng video";
+    } catch (e) {
+      console.warn("[Dashboard] Không tải được đoạn video:", e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function renderAlertCard(alert, isNew = false) {
     if (elEmptyPlaceholder) {
       elEmptyPlaceholder.style.display = "none";
@@ -482,7 +529,16 @@
         <span class="meta-field">Góc thân: <strong>${alert.evidence?.torso_angle_deg ? alert.evidence.torso_angle_deg + "°" : "N/A"}</strong></span>
         <span class="meta-field">Bất động: <strong>${alert.evidence?.immobility_index ?? "N/A"}</strong></span>
       </div>
+      ${alert.clip_path ? `
+      <div class="alert-item-clip-row">
+        <button type="button" class="btn-alert-clip">▶ Xem đoạn video té ngã</button>
+      </div>` : ""}
     `;
+
+    const btnClip = card.querySelector(".btn-alert-clip");
+    if (btnClip) {
+      btnClip.addEventListener("click", () => toggleAlertClip(card, eventId, btnClip));
+    }
 
     // 3-Dots dropdown and individual permanent delete listener
     const btnMenu = card.querySelector(".btn-alert-menu");
@@ -526,6 +582,7 @@
   }
 
   // 5. Polling REST APIs for Telemetry & Health
+  let lastConnState = null;
   async function pollStatus() {
     try {
       const res = await fetch(`${API_BASE}/status`);
@@ -539,6 +596,17 @@
       isCameraRunning = Boolean(data.camera_active);
       elKpiFps.textContent = data.current_fps ? data.current_fps.toFixed(1) : "0.0";
       elKpiTracks.textContent = data.tracked_persons_count ?? 0;
+
+      // Network / remote camera health (auto-reconnect with backoff runs on the server)
+      const conn = data.camera_connection;
+      if (conn && conn.state === "reconnecting") {
+        const tries = conn.reconnect_attempts ? ` (lần thử ${conn.reconnect_attempts})` : "";
+        showCamFeedback(`Mất kết nối camera ở xa, đang tự động kết nối lại${tries}...`, "error", 2500);
+        lastConnState = "reconnecting";
+      } else if (conn && conn.state === "connected" && lastConnState === "reconnecting") {
+        showCamFeedback("Đã kết nối lại với camera.", "success", 3000);
+        lastConnState = "connected";
+      }
 
       // Update button labels
       if (isCameraRunning) {
@@ -689,7 +757,48 @@
     yoosee: "rtsp://admin:123456@192.168.1.100:554/onvif1",
     tapo: "rtsp://admin:password123@192.168.1.100:554/stream1",
     ezviz: "rtsp://admin:VERIFICATION_CODE@192.168.1.100:554/h264/ch1/main/av_stream",
+    ddns: "rtsp://tenmien-cua-ban.ddns.net:554/stream1",
+    vpn: "rtsp://100.64.0.10:554/stream1",
+    http_mjpeg: "http://192.168.1.50:8080/video",
   };
+
+  function readRtspCredentials() {
+    return {
+      rtsp_username: elRtspUsernameInput && elRtspUsernameInput.value.trim() ? elRtspUsernameInput.value.trim() : undefined,
+      rtsp_password: elRtspPasswordInput && elRtspPasswordInput.value ? elRtspPasswordInput.value : undefined,
+    };
+  }
+
+  if (elBtnTestRtsp) {
+    elBtnTestRtsp.addEventListener("click", async () => {
+      const url = elRtspUrlInput ? elRtspUrlInput.value.trim() : "";
+      if (!url) {
+        showCamFeedback("Vui lòng nhập đường dẫn camera trước khi kiểm tra.", "error", 3500);
+        return;
+      }
+      elBtnTestRtsp.disabled = true;
+      elBtnTestRtsp.textContent = "⏳ Đang thử...";
+      showCamFeedback("Đang thử kết nối tới camera (tối đa ~10 giây với camera ở xa)...", "info", 0);
+      try {
+        const res = await fetch(`${API_BASE}/camera/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rtsp_url: url, ...readRtspCredentials() }),
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          showCamFeedback(`${data.message} (kết nối mất ${data.connect_ms} ms)`, "success", 6000);
+        } else {
+          showCamFeedback(data.message || data.detail || "Không kết nối được camera.", "error", 7000);
+        }
+      } catch (e) {
+        showCamFeedback("Lỗi kết nối tới Backend API: " + e.message, "error", 5000);
+      } finally {
+        elBtnTestRtsp.disabled = false;
+        elBtnTestRtsp.textContent = "Kiểm tra";
+      }
+    });
+  }
 
   // Fetch Available Webcam Devices on Machine
   async function fetchCameraDevices() {
@@ -802,7 +911,7 @@
     } else if (srcType === "rtsp") {
       rtspUrl = elRtspUrlInput ? elRtspUrlInput.value.trim() : "";
       if (!rtspUrl) {
-        showCamFeedback("Vui lòng nhập đường dẫn RTSP Camera (ví dụ: rtsp://admin:pass@192.168.1.100:554/stream)", "error", 4000);
+        showCamFeedback("Vui lòng nhập đường dẫn camera (ví dụ: rtsp://192.168.1.100:554/stream1 hoặc rtsp://tenmien.ddns.net:554/stream1)", "error", 4000);
         if (elRtspUrlInput) elRtspUrlInput.focus();
         return;
       }
@@ -833,6 +942,7 @@
           source_type: srcType,
           device_index: devIndex,
           rtsp_url: rtspUrl || undefined,
+          ...(srcType === "rtsp" ? readRtspCredentials() : {}),
           video_path: videoPath || undefined,
           save_as_default: saveDefault,
         }),
