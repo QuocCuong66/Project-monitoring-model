@@ -39,6 +39,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.config import load_config, get_project_root
 from src.utils.profiler import ResourceMonitor
 from src.camera.stream import CameraStream, FramePacket
+from src.camera.camera_settings import load_camera_config
 from src.camera.webcam import WebcamStream
 from src.camera.rtsp import RTSPStream
 from src.camera.video_file import VideoFileStream
@@ -89,7 +90,7 @@ def load_system_configs() -> Dict[str, Any]:
     model_cfg = load_config("model.yaml")
     infer_cfg = load_config("inference.yaml")
     thresholds_cfg = load_config("thresholds.yaml")
-    camera_cfg = load_config("camera.yaml")
+    camera_cfg = load_camera_config()  # configs/camera.yaml + camera saved by the user (%APPDATA%)
     print("  • configs/model.yaml       : [OK]")
     print("  • configs/inference.yaml   : [OK]")
     print("  • configs/thresholds.yaml  : [OK]")

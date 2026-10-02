@@ -18,6 +18,7 @@ from src.pipeline.realtime_pipeline import RealtimePipeline
 from src.camera.webcam import WebcamStream
 from src.camera.rtsp import RTSPStream
 from src.camera.video_file import VideoFileStream
+from src.camera.camera_settings import save_user_camera_settings
 from src.alerts.event_logger import EventLogger, AlertEvent
 from src.alerts.telegram import TelegramSettings
 from src.api import telegram_routes
@@ -143,28 +144,16 @@ def probe_available_webcams(max_probe: int = 4) -> List[Dict[str, Any]]:
 
 
 def save_camera_config_to_yaml(cfg_dict: Dict[str, Any]) -> bool:
-    """Save camera settings to configs/camera.yaml."""
+    """Save the default camera to the per-user settings file (%APPDATA%), never to configs/.
+
+    The RTSP URL can contain the camera password; configs/camera.yaml is tracked by git
+    and shipped in the installer, so it must keep only placeholder defaults.
+    """
     try:
-        import yaml
-        yaml_path = get_project_root() / "configs" / "camera.yaml"
-        existing: Dict[str, Any] = {}
-        if yaml_path.exists():
-            with open(yaml_path, "r", encoding="utf-8") as f:
-                existing = yaml.safe_load(f) or {}
-
-        existing["source_type"] = cfg_dict.get("source_type", existing.get("source_type", "webcam"))
-        if "device_index" in cfg_dict:
-            existing.setdefault("webcam", {})["device_index"] = cfg_dict["device_index"]
-        if cfg_dict.get("rtsp_url"):
-            existing.setdefault("rtsp", {})["url"] = cfg_dict["rtsp_url"].strip()
-        if cfg_dict.get("video_path"):
-            existing.setdefault("video", {})["path"] = cfg_dict["video_path"].strip()
-
-        with open(yaml_path, "w", encoding="utf-8") as f:
-            yaml.dump(existing, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        save_user_camera_settings(cfg_dict)
         return True
     except Exception as e:
-        print(f"[Error] Cannot save camera.yaml: {e}")
+        print(f"[Error] Cannot save camera settings: {e}")
         return False
 
 
@@ -412,11 +401,11 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
 
 @app.post("/camera/save-config")
 def save_camera_configuration(req: CameraSwitchRequest) -> Dict[str, Any]:
-    """Save the selected camera setup as default in configs/camera.yaml."""
+    """Save the selected camera setup as the per-user default (%APPDATA%)."""
     success = save_camera_config_to_yaml(req.dict())
     if success:
-        return {"status": "success", "message": "Đã lưu cấu hình camera mặc định vào configs/camera.yaml"}
-    raise HTTPException(status_code=500, detail="Không thể ghi tệp cấu hình configs/camera.yaml")
+        return {"status": "success", "message": "Đã lưu camera mặc định. Lần sau mở ứng dụng sẽ tự dùng camera này."}
+    raise HTTPException(status_code=500, detail="Không thể lưu cấu hình camera mặc định")
 
 
 @app.post("/camera/start")

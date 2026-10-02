@@ -11,6 +11,7 @@ Entrypoint tối ưu hóa cho PyInstaller đóng gói ứng dụng Windows độ
 """
 
 import os
+import re
 import sys
 import time
 import shutil
@@ -259,20 +260,37 @@ def run_app():
     except Exception as e:
         print(f"[Warning] Đồng bộ WebSocket dispatcher: {e}")
 
-    # 4. Khởi tạo Camera Stream
+    # 4. Khởi tạo Camera Stream: camera người dùng đã "LƯU MẶC ĐỊNH" (%APPDATA%), mặc định Webcam 0
+    cam_cfg = configs.get("camera", {})
+    source_type = cam_cfg.get("source_type", "webcam")
+    if source_type not in ("webcam", "rtsp", "video"):
+        source_type = "webcam"
+    device_index = int(cam_cfg.get("webcam", {}).get("device_index", 0))
+    rtsp_url = cam_cfg.get("rtsp", {}).get("url") if source_type == "rtsp" else None
+    video_path = cam_cfg.get("video", {}).get("path") if source_type == "video" else None
+    if source_type == "rtsp":
+        cam_name = "RTSP (" + re.sub(r"://([^:]+):([^@]+)@", r"://\1:****@", rtsp_url or "") + ")"
+    elif source_type == "video":
+        cam_name = f"Video: {Path(video_path or '').name}"
+    else:
+        cam_name = f"Webcam {device_index}"
     try:
         stream = core_main.initialize_camera_stream(
-            source_type="webcam",
-            device_index=0,
-            camera_cfg=configs.get("camera", {}),
+            source_type=source_type,
+            device_index=device_index,
+            rtsp_url=rtsp_url,
+            video_path=video_path,
+            camera_cfg=cam_cfg,
         )
         with srv.state_lock:
             srv.camera_stream = stream
             srv.is_running = True
             srv.current_camera_info.update({
-                "source_type": "webcam",
-                "device_index": 0,
-                "name": "Webcam 0 (Mặc định)",
+                "source_type": source_type,
+                "device_index": device_index,
+                "rtsp_url": rtsp_url,
+                "video_path": video_path,
+                "name": cam_name,
             })
     except Exception as e:
         print(f"[Warning] Lỗi khởi tạo camera thực tế, chuyển sang Synthetic: {e}")
