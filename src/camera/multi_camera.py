@@ -76,7 +76,9 @@ class MultiCameraManager:
             dev_idx = int(source_uri) if str(source_uri).isdigit() else 0
             return WebcamStream(device_index=dev_idx, max_queue_size=1)
         elif source_type.lower() == "rtsp":
-            return RTSPStream(url=str(source_uri), max_queue_size=1)
+            stream = RTSPStream.from_config(str(source_uri), max_queue_size=1)
+            stream.allow_offline_start = True
+            return stream
         elif source_type.lower() == "video":
             return VideoFileStream(video_path=str(source_uri), loop=True, max_queue_size=1)
         else:

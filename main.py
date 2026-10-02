@@ -140,7 +140,10 @@ def initialize_camera_stream(
         url = rtsp_url or camera_cfg.get("rtsp", {}).get("url")
         if not url:
             raise ValueError("RTSP URL chưa được cung cấp. Vui lòng kiểm tra configs/camera.yaml hoặc cờ --rtsp-url")
-        stream = RTSPStream(url=url)
+        stream = RTSPStream.from_config(url, camera_cfg.get("rtsp", {}))
+        # A remote camera may still be offline at boot (router / 4G restarting): keep
+        # retrying in the background instead of silently falling back to a fake stream.
+        stream.allow_offline_start = True
 
     elif source_type == "video":
         vpath = video_path or camera_cfg.get("video", {}).get("path")
