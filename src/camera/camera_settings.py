@@ -66,3 +66,23 @@ def merge_camera_config(base: dict[str, Any], user: dict[str, Any]) -> dict[str,
 
 def load_camera_config() -> dict[str, Any]:
     return merge_camera_config(load_config("camera.yaml") or {}, load_user_camera_settings())
+
+
+def load_extra_cameras(path: Optional[Path] = None) -> list[dict[str, Any]]:
+    """Extra cameras added from the UI (multi-camera mode), in the order they were added."""
+    cameras = (load_user_camera_settings(path).get("extra_cameras") or {}).get("cameras") or []
+    return [dict(c) for c in cameras if isinstance(c, dict) and c.get("id")]
+
+
+def save_extra_cameras(cameras: list[dict[str, Any]], path: Optional[Path] = None) -> Path:
+    """Persist the extra camera list (may hold RTSP passwords, hence %APPDATA% like the default camera)."""
+    path = path or get_camera_settings_path()
+    data = load_user_camera_settings(path)
+    data.setdefault("extra_cameras", {})
+    if not isinstance(data["extra_cameras"], dict):
+        data["extra_cameras"] = {}
+    data["extra_cameras"]["cameras"] = [dict(c) for c in cameras]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    return path

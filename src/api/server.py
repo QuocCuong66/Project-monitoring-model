@@ -9,22 +9,52 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 import cv2
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from src.pipeline.realtime_pipeline import RealtimePipeline
 from src.camera.webcam import WebcamStream
 from src.camera.rtsp import RTSPStream, build_stream_url, mask_url, probe_stream, validate_stream_url
 from src.camera.video_file import VideoFileStream
-from src.camera.camera_settings import save_user_camera_settings
+from src.camera.camera_settings import load_camera_config, save_user_camera_settings
+from src.pipeline.multi_camera import CameraConfigError, MultiCameraMonitor, default_stream_factory
 from src.alerts.clip_recorder import find_clip_file
 from src.alerts.event_logger import EventLogger, AlertEvent
 from src.alerts.telegram import TelegramSettings
 from src.api import telegram_routes
+from src.auth.middleware import AuthMiddleware
+from src.auth import routes as auth_routes
 from src.utils.config import get_project_root, load_config
 from src.utils.profiler import ResourceMonitor
+
+# ---------------------------------------------------------------------------
+# Security configuration (loaded once at import time)
+# ---------------------------------------------------------------------------
+_security_cfg: Dict[str, Any] = {}
+try:
+    _security_cfg = load_config("security.yaml") or {}
+except Exception:
+    pass
+
+_cors_cfg = _security_cfg.get("cors", {}) or {}
+_cors_origins = _cors_cfg.get("allowed_origins", ["http://127.0.0.1:8000", "http://localhost:8000"])
+
+_rate_cfg = _security_cfg.get("rate_limit", {}) or {}
+_rate_enabled = _rate_cfg.get("enabled", True)
+_rate_login = _rate_cfg.get("login", "5/minute")
+_rate_default = _rate_cfg.get("api_default", "60/minute")
+_rate_stream = _rate_cfg.get("stream", "10/minute")
+
+# ---------------------------------------------------------------------------
+# Rate limiter
+# ---------------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address, enabled=_rate_enabled)
 
 app = FastAPI(
     title="Fall and Stroke Warning System API",
@@ -32,13 +62,30 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Rate limiting error handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, lambda req, exc: JSONResponse(
+    status_code=429,
+    content={"detail": "Quá nhiều yêu cầu. Vui lòng thử lại sau."},
+))
+app.add_middleware(SlowAPIMiddleware)
+
+# Authentication middleware (must be added BEFORE CORS so it processes first)
+app.add_middleware(AuthMiddleware)
+
+# CORS: use configured origins instead of wildcard "*"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Auth API routes
+app.include_router(auth_routes.router)
+
+from fastapi.responses import JSONResponse
 
 # Global runtime state
 state_lock = threading.Lock()
@@ -52,6 +99,8 @@ latest_frame_seq = 0  # Incremented on every newly encoded JPEG
 active_ws_clients: List[WebSocket] = []
 event_logger = EventLogger()
 resource_monitor = ResourceMonitor()
+# Extra cameras (multi-camera mode); the primary camera above stays the UI-switchable one
+multi_camera_monitor: Optional[MultiCameraMonitor] = None
 
 # Uvicorn's actual running event loop, captured at startup so background
 # pipeline threads (which are not the asyncio loop thread) can schedule
@@ -114,6 +163,26 @@ def _resolve_stream_url(url: Optional[str], username: Optional[str], password: O
     if error:
         raise HTTPException(status_code=400, detail=error)
     return full
+
+
+def _unmask_stream_url(url: Optional[str]) -> Optional[str]:
+    """If incoming URL has masked password :****@ and matches current camera, restore real password."""
+    if not url or ":****@" not in url:
+        return url
+    with state_lock:
+        current_url = current_camera_info.get("rtsp_url")
+    if not current_url:
+        return url
+    import re
+    m_new = re.search(r"://([^:/@]+):[*]+@([^/]+)", url)
+    if not m_new:
+        return url
+    user, host = m_new.group(1), m_new.group(2)
+    m_orig = re.search(r"://([^:/@]+):([^@]*)@([^/]+)", current_url)
+    if m_orig and m_orig.group(1) == user and m_orig.group(3) == host:
+        real_pass = m_orig.group(2)
+        return url.replace(f"://{user}:****@{host}", f"://{user}:{real_pass}@{host}")
+    return url
 
 
 def _connection_status() -> Optional[Dict[str, Any]]:
@@ -266,12 +335,15 @@ def system_status() -> Dict[str, Any]:
                 tracks_count = len(pipeline_instance.shared_state.tracks)
             elif hasattr(pipeline_instance, "tracker") and hasattr(pipeline_instance.tracker, "_tracks"):
                 tracks_count = len(pipeline_instance.tracker._tracks)
+    extras = multi_camera_monitor.list_status() if multi_camera_monitor is not None else []
 
     return {
         "camera_active": running,
         "current_fps": round(fps, 1),
         "tracked_persons_count": tracks_count,
         "camera_connection": _connection_status(),  # network cameras only (state / reconnect attempts)
+        "extra_cameras_online": sum(1 for c in extras if c.get("online")),
+        "extra_cameras_total": len(extras),
         "timestamp": time.time(),
     }
 
@@ -291,6 +363,9 @@ def get_camera_info() -> Dict[str, Any]:
         w = camera_stream.get_width() if active and hasattr(camera_stream, "get_width") else 0
         h = camera_stream.get_height() if active and hasattr(camera_stream, "get_height") else 0
         info = dict(current_camera_info)
+        # Protect RTSP credentials: never expose raw passwords to the client
+        if info.get("rtsp_url"):
+            info["rtsp_url"] = mask_url(info["rtsp_url"])
         info.update({
             "is_active": active,
             "fps": round(fps, 1),
@@ -307,6 +382,7 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
 
     # Validate inputs
     if req.source_type == "rtsp":
+        req.rtsp_url = _unmask_stream_url(req.rtsp_url)
         if not req.rtsp_url or not req.rtsp_url.strip():
             raise HTTPException(
                 status_code=400,
@@ -318,6 +394,12 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
         if not req.video_path or not req.video_path.strip():
             req.video_path = "data/videos/sample_adl_fall.mp4"
         req.video_path = req.video_path.strip()
+    elif req.source_type == "webcam" and multi_camera_monitor is not None:
+        if req.device_index in multi_camera_monitor.webcam_indices_in_use():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Webcam {req.device_index} đang được dùng làm camera thêm. Hãy xóa camera đó trước.",
+            )
 
     with state_lock:
         # Release previous camera stream cleanly
@@ -438,6 +520,7 @@ def test_camera_connection(req: CameraTestRequest) -> Dict[str, Any]:
 def save_camera_configuration(req: CameraSwitchRequest) -> Dict[str, Any]:
     """Save the selected camera setup as the per-user default (%APPDATA%)."""
     if req.source_type == "rtsp":
+        req.rtsp_url = _unmask_stream_url(req.rtsp_url)
         req.rtsp_url = _resolve_stream_url(req.rtsp_url, req.rtsp_username, req.rtsp_password)
     success = save_camera_config_to_yaml(req.dict())
     if success:
@@ -507,6 +590,8 @@ def set_face_blur(enabled: bool = True) -> Dict[str, Any]:
                 pipeline_instance.blur_faces = enabled
             elif hasattr(pipeline_instance, "pipeline") and hasattr(pipeline_instance.pipeline, "blur_faces"):
                 pipeline_instance.pipeline.blur_faces = enabled
+    if multi_camera_monitor is not None:
+        multi_camera_monitor.set_blur(enabled)
     return {"status": "ok", "face_blur": enabled}
 
 
@@ -756,6 +841,121 @@ def video_mjpeg_feed():
     return StreamingResponse(mjpeg_generator(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
+# ---------------------------------------------------------------------------
+# Multi-camera: extra cameras, each with its own AI session and MJPEG tile feed
+# ---------------------------------------------------------------------------
+class ExtraCameraRequest(BaseModel):
+    name: Optional[str] = None
+    source_type: str = "rtsp"  # "rtsp" (any network / remote camera), "webcam", "video"
+    device_index: int = 0
+    rtsp_url: Optional[str] = None
+    rtsp_username: Optional[str] = None
+    rtsp_password: Optional[str] = None
+    video_path: Optional[str] = None
+
+
+def init_multi_camera(pipeline: Any, camera_cfg: Optional[Dict[str, Any]] = None) -> MultiCameraMonitor:
+    """Create the extra-camera monitor sharing `pipeline`'s models, and restore saved cameras.
+
+    Called by main.py / app_runner.py once the primary pipeline exists.
+    """
+    global multi_camera_monitor
+    camera_cfg = camera_cfg if camera_cfg is not None else load_camera_config()
+    extra_cfg = camera_cfg.get("extra_cameras", {}) or {}
+    monitor = MultiCameraMonitor(
+        settings=extra_cfg,
+        stream_factory=default_stream_factory(camera_cfg),
+        jpeg_quality=_jpeg_quality,
+    )
+    monitor.attach_base_pipeline(pipeline)
+    with state_lock:
+        multi_camera_monitor = monitor
+    for err in monitor.load_saved(extra_cfg.get("cameras") or []):
+        print(f"[Warning] Camera thêm không khởi động được: {err}")
+    return monitor
+
+
+def _get_multi_camera_monitor() -> MultiCameraMonitor:
+    if multi_camera_monitor is None:
+        return init_multi_camera(pipeline_instance)
+    return multi_camera_monitor
+
+
+def _primary_webcam_index() -> Optional[int]:
+    with state_lock:
+        if current_camera_info.get("source_type") == "webcam":
+            return int(current_camera_info.get("device_index") or 0)
+    return None
+
+
+@app.get("/api/cameras")
+def list_cameras() -> Dict[str, Any]:
+    """Primary camera + every extra camera with its live status (passwords masked)."""
+    monitor = multi_camera_monitor
+    with state_lock:
+        primary = {
+            "id": "main",
+            "name": current_camera_info.get("name"),
+            "source_type": current_camera_info.get("source_type"),
+            "online": bool(is_running and camera_stream is not None and camera_stream.is_opened()),
+        }
+    return {
+        "primary": primary,
+        "cameras": monitor.list_status() if monitor is not None else [],
+        "max_cameras": monitor.max_cameras if monitor is not None else 0,
+    }
+
+
+@app.post("/api/cameras")
+def add_extra_camera(req: ExtraCameraRequest) -> Dict[str, Any]:
+    """Add and start an extra camera; it is saved (%APPDATA%) and restored at next start."""
+    entry = req.model_dump()
+    if req.source_type == "rtsp":
+        entry["rtsp_url"] = _resolve_stream_url(req.rtsp_url, req.rtsp_username, req.rtsp_password)
+    entry.pop("rtsp_username", None)
+    entry.pop("rtsp_password", None)
+    try:
+        status = _get_multi_camera_monitor().add_camera(entry, primary_webcam_index=_primary_webcam_index())
+    except CameraConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "success", "message": f"Đã thêm camera {status['name']}.", "camera": status}
+
+
+@app.delete("/api/cameras/{cam_id}")
+def remove_extra_camera(cam_id: str) -> Dict[str, Any]:
+    """Stop an extra camera and forget it."""
+    monitor = multi_camera_monitor
+    if monitor is None or not monitor.remove_camera(cam_id):
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy camera '{cam_id}'.")
+    return {"status": "success", "camera_id": cam_id}
+
+
+def _camera_mjpeg_generator(cam_id: str):
+    last_seq = -1
+    last_sent = 0.0
+    while True:
+        monitor = multi_camera_monitor
+        session = monitor.get_session(cam_id) if monitor is not None else None
+        if session is None:
+            return  # camera removed: end the stream so the browser tile stops
+        frame_bytes, seq = session.latest_jpeg()
+        now = time.time()
+        if frame_bytes is not None and (seq != last_seq or now - last_sent > 1.0):
+            last_seq = seq
+            last_sent = now
+            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+        time.sleep(0.02)
+
+
+@app.get("/api/cameras/{cam_id}/stream")
+def extra_camera_mjpeg_feed(cam_id: str):
+    """MJPEG feed of one extra camera (annotated, downscaled tile)."""
+    monitor = multi_camera_monitor
+    if monitor is None or monitor.get_session(cam_id) is None:
+        raise HTTPException(status_code=404, detail=f"Camera '{cam_id}' không hoạt động.")
+    return StreamingResponse(_camera_mjpeg_generator(cam_id), media_type="multipart/x-mixed-replace; boundary=frame")
+
+
 def broadcast_alert_event(event: AlertEvent) -> None:
     """Send alert JSON to all connected WebSocket clients.
 
@@ -783,6 +983,25 @@ def broadcast_alert_event(event: AlertEvent) -> None:
 @app.websocket("/ws/alerts")
 async def websocket_alerts_endpoint(websocket: WebSocket):
     """WebSocket stream pushing real-time emergency events."""
+    from src.auth.middleware import verify_session_token
+    from src.auth.request_guard import is_allowed_host, is_cross_site, is_local_request
+
+    # Browsers always send Origin on WebSocket handshakes: refuse other sites (cross-site
+    # WebSocket hijacking through the localhost bypass) and rebinding host names.
+    if not is_allowed_host(websocket) or is_cross_site(websocket):
+        await websocket.close(code=4003, reason="Forbidden origin")
+        return
+    if _security_cfg.get("auth", {}).get("enabled", True):
+        allow_local = _security_cfg.get("auth", {}).get("allow_localhost_unauthenticated", True)
+        if not (allow_local and is_local_request(websocket)):
+            token = websocket.query_params.get("token") or websocket.cookies.get("access_token")
+            if not token:
+                await websocket.close(code=4001, reason="Unauthorized")
+                return
+            if verify_session_token(token) is None:
+                await websocket.close(code=4001, reason="Invalid token")
+                return
+
     await websocket.accept()
     active_ws_clients.append(websocket)
     try:

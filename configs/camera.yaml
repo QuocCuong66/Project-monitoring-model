@@ -29,22 +29,12 @@ video:
 buffer:
   max_queue_size: 1 # minimal zero-lag queue
 
-# Multi-Camera Configuration (Khả năng mở rộng nhiều camera đồng thời)
-multi_camera:
-  enabled: false
-  cameras:
-    - id: "cam_living_room"
-      name: "Living Room (Phòng khách)"
-      type: "webcam"
-      uri: 0
-      enabled: true
-    - id: "cam_bedroom"
-      name: "Bedroom (Phòng ngủ)"
-      type: "rtsp"
-      uri: "rtsp://admin:password@192.168.1.101:554/stream1"
-      enabled: false
-    - id: "cam_kitchen"
-      name: "Kitchen (Nhà bếp)"
-      type: "rtsp"
-      uri: "rtsp://admin:password@192.168.1.102:554/stream1"
-      enabled: false
+# Nhiều camera: camera chính (ở trên) + các camera thêm, mỗi camera có bộ theo dõi, bộ đệm thời gian,
+# máy trạng thái và thời gian chờ cảnh báo RIÊNG; các mô hình AI chỉ nạp MỘT lần và dùng chung (không tốn thêm VRAM).
+# Camera thêm được thêm / xóa trên giao diện web và lưu vào %APPDATA% (có thể chứa mật khẩu RTSP).
+extra_cameras:
+  max_cameras: 3        # Số camera thêm tối đa. Mọi camera dùng chung 1 GPU: RTX 3050 6GB ~ 3 camera thêm
+  tile_fps: 10          # FPS hiển thị ô camera thêm trên web (AI vẫn nhận khung hình mới nhất)
+  tile_max_width: 640   # Thu nhỏ ảnh ô camera thêm trước khi mã hóa JPEG (tiết kiệm CPU / băng thông)
+  stale_after_seconds: 5.0  # Không có khung hình mới sau chừng này giây -> hiển thị "Mất kết nối"
+  cameras: []           # Ví dụ: - {id: cam_bedroom, name: "Phòng ngủ", source_type: rtsp, rtsp_url: "rtsp://..."}

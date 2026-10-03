@@ -1717,3 +1717,332 @@ input:checked + .slider:before {
   font-size: 11.5px;
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   CAMERA KHÁC (ĐA CAMERA) — lưới ô camera thêm, trải rộng cả 2 cột
+   ========================================================================== */
+.extra-cameras-card {
+  grid-column: 1 / -1;
+}
+
+.extra-cam-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: #f1f5f9;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin-left: 8px;
+}
+
+.extra-cam-add-toggle {
+  padding: 7px 14px;
+}
+
+.extra-cam-form {
+  padding: 14px 20px 4px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.extra-cam-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.extra-cam-form .cam-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.extra-cam-form .cam-buttons-row {
+  max-width: 420px;
+  margin-bottom: 10px;
+}
+
+.extra-cam-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  padding: 16px 20px;
+}
+
+.extra-cam-grid:empty {
+  display: none;
+}
+
+.extra-cam-empty {
+  padding: 18px 20px 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.extra-cam-tile {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #0f172a;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.extra-cam-tile.is-emergency {
+  border-color: var(--status-red);
+  box-shadow: 0 0 0 3px var(--status-red-border);
+  animation: extraCamFlash 1s ease-in-out infinite alternate;
+}
+
+@keyframes extraCamFlash {
+  from { box-shadow: 0 0 0 2px var(--status-red-border); }
+  to { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.45); }
+}
+
+.extra-cam-video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #0f172a;
+}
+
+.extra-cam-video img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.extra-cam-offline {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px;
+  color: #cbd5e1;
+  font-size: 13px;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.extra-cam-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+}
+
+.extra-cam-name {
+  font-size: 13.5px;
+  color: var(--text-dark);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extra-cam-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.extra-cam-meta .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  background: var(--text-light);
+}
+
+.extra-cam-meta .dot.on { background: var(--status-green); }
+.extra-cam-meta .dot.alert { background: var(--status-red); }
+
+.btn-extra-cam-remove {
+  border: 1px solid var(--border-subtle);
+  background: #f8fafc;
+  color: var(--text-muted);
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.btn-extra-cam-remove:hover {
+  color: var(--status-red);
+  border-color: var(--status-red-border);
+  background: var(--status-red-bg);
+}
+
+@media (max-width: 640px) {
+  .extra-cam-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .extra-cam-grid {
+    grid-template-columns: 1fr;
+    padding: 12px 16px;
+  }
+}
+
+/* ==========================================================================
+   AUTHENTICATION & SECURITY MODAL (MẠNG NỘI BỘ / LAN)
+   ========================================================================== */
+.auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 16px;
+  animation: authFadeIn 0.25s ease-out;
+}
+
+@keyframes authFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.auth-modal-card {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  max-width: 440px;
+  padding: 32px 28px;
+  position: relative;
+}
+
+.auth-modal-header {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.auth-icon-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent-blue-subtle);
+  border: 1px solid #bfdbfe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin: 0 auto 14px auto;
+}
+
+.auth-modal-header h2 {
+  font-size: 20px;
+  color: var(--text-dark);
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+
+.auth-modal-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-input-group {
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.auth-input-group label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.auth-input-group input {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: #f8fafc;
+  color: var(--text-dark);
+  outline: none;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.auth-input-group input:focus {
+  border-color: var(--accent-blue);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.auth-remember-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 18px;
+}
+
+.auth-remember-tip .tip-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.auth-remember-tip .tip-text {
+  font-size: 12px;
+  color: #166534;
+  line-height: 1.45;
+}
+
+.auth-error-msg {
+  background: var(--status-red-bg);
+  border: 1px solid var(--status-red-border);
+  color: var(--status-red);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.auth-action-row {
+  margin-top: 4px;
+}
+
+.btn-auth-submit {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  background: var(--accent-blue);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.btn-auth-submit:hover {
+  background: var(--accent-blue-hover);
+}
+
+.btn-auth-submit:active {
+  transform: scale(0.99);
+}
+

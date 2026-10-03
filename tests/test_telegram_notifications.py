@@ -150,6 +150,17 @@ def test_dispatcher_sends_non_diagnostic_alert(fake_api: FakeTelegramApi, settin
     assert "Please check the person." in sent["text"]
 
 
+def test_dispatcher_names_the_camera(fake_api: FakeTelegramApi, settings_path: Path) -> None:
+    dispatcher = NotificationDispatcher()
+    dispatcher.update_telegram_settings(TelegramSettings(True, VALID_TOKEN, "42"))
+    event = _event()
+    event.camera_name = "Phòng_ngủ *2*"
+    dispatcher.dispatch(event)
+
+    text = fake_api.calls[0][1]["data"]["text"]
+    assert "Camera:* Phòng\\_ngủ \\*2\\*" in text  # Markdown in the user's camera name is escaped
+
+
 def test_dispatcher_skips_telegram_when_disabled(fake_api: FakeTelegramApi, settings_path: Path) -> None:
     dispatcher = NotificationDispatcher()
     dispatcher.update_telegram_settings(TelegramSettings(False, VALID_TOKEN, "42"))

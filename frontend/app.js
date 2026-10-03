@@ -1,15 +1,117 @@
 /**
  * ELDERLY AI MONITOR — FRONTEND DASHBOARD CONTROLLER
  * Real-time WebSocket connection, REST telemetry polling, and MJPEG video streaming.
+ * Authentication layer with JWT token management.
  */
 
 (() => {
   "use strict";
 
-  // 1. API Configuration & Auto-Discovery
+  // 1. API Configuration, SSL & Auto-Discovery
+  const isHttps = window.location.protocol === "https:";
   const isFileOrigin = window.location.protocol === "file:";
   const API_BASE = isFileOrigin ? "http://127.0.0.1:8000" : window.location.origin;
-  const WS_URL = API_BASE.replace(/^http/, "ws") + "/ws/alerts";
+  const WS_PROTOCOL = isHttps ? "wss:" : "ws:";
+  const WS_BASE = API_BASE.replace(/^https?:/, WS_PROTOCOL);
+
+  const AUTH_STORAGE_KEY = "fall_stroke_auth_token";
+  const REFRESH_STORAGE_KEY = "fall_stroke_refresh_token";
+
+  function getSavedToken() {
+    try {
+      return localStorage.getItem(AUTH_STORAGE_KEY) || "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function saveAuthToken(token) {
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, token);
+    } catch (_) {}
+  }
+
+  function clearAuthToken() {
+    try {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem(REFRESH_STORAGE_KEY);
+    } catch (_) {}
+  }
+
+  function saveRefreshToken(token) {
+    try {
+      if (token) localStorage.setItem(REFRESH_STORAGE_KEY, token);
+    } catch (_) {}
+  }
+
+  function getRefreshToken() {
+    try {
+      return localStorage.getItem(REFRESH_STORAGE_KEY) || "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  // Access tokens are short-lived (security.yaml): renew silently with the refresh token.
+  // Concurrent 401s share one refresh request.
+  let refreshInFlight = null;
+  function refreshAccessToken() {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return Promise.resolve(false);
+    if (!refreshInFlight) {
+      refreshInFlight = fetch(`${API_BASE}/api/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            if (res.status === 401) clearAuthToken();
+            return false;
+          }
+          const json = await res.json();
+          saveAuthToken(json.access_token);
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => { refreshInFlight = null; });
+    }
+    return refreshInFlight;
+  }
+
+  // Helper for MJPEG stream URL with cache-buster and token parameter
+  function buildMjpegUrl() {
+    const token = getSavedToken();
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
+    return `${API_BASE}/stream/mjpeg?t=${Date.now()}${tokenParam}`;
+  }
+
+  function getWsUrl() {
+    const token = getSavedToken();
+    return `${WS_BASE}/ws/alerts${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  }
+
+  // Wrapper around native fetch that automatically injects JWT Bearer token
+  async function apiFetch(url, options = {}) {
+    const opts = { ...options };
+    const headers = new Headers(opts.headers || {});
+    const token = getSavedToken();
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    opts.headers = headers;
+
+    let res = await fetch(url, opts);
+    const isAuthCall = url.includes("/api/auth/");
+    if (res.status === 401 && !isAuthCall && token && await refreshAccessToken()) {
+      headers.set("Authorization", `Bearer ${getSavedToken()}`);
+      res = await fetch(url, { ...opts, headers });
+    }
+    if (res.status === 401 && !isAuthCall) {
+      handleAuthRequired();
+    }
+    return res;
+  }
 
   // State
   let soundEnabled = true;
@@ -91,6 +193,20 @@
   const elVideoCard = document.querySelector(".video-card");
   const elVideoFallBadge = document.getElementById("video-fall-badge");
   const elVideoFallText = document.getElementById("video-fall-text");
+
+  // Authentication Modal DOM Elements
+  const elAuthModalBackdrop = document.getElementById("auth-modal-backdrop");
+  const elAuthModalTitle = document.getElementById("auth-modal-title");
+  const elAuthModalSubtitle = document.getElementById("auth-modal-subtitle");
+  const elAuthForm = document.getElementById("auth-form");
+  const elAuthUsername = document.getElementById("auth-username-input");
+  const elAuthPassword = document.getElementById("auth-password-input");
+  const elAuthError = document.getElementById("auth-error-msg");
+  const elBtnAuthSubmit = document.getElementById("btn-auth-submit");
+  const elAuthSubmitTxt = document.getElementById("auth-submit-txt");
+
+  let isSetupMode = false;
+  let isDashboardInitialized = false;
 
   // Web Audio API Synthesizer for Multi-harmonic Emergency Alarm Chimes & Horn
   let audioCtx = null;
@@ -311,7 +427,7 @@
     elWsText.textContent = "WebSocket: Đang nối...";
 
     try {
-      wsConnection = new WebSocket(WS_URL);
+      wsConnection = new WebSocket(getWsUrl());
 
       wsConnection.onopen = () => {
         elWsDot.className = "badge-dot dot-online";
@@ -331,10 +447,14 @@
         }
       };
 
-      wsConnection.onclose = () => {
+      wsConnection.onclose = (evt) => {
         elWsDot.className = "badge-dot dot-offline";
         elWsText.textContent = "WebSocket: Mất kết nối";
-        scheduleWsReconnect();
+        if (evt && evt.code === 4001) {
+          handleAuthRequired();
+        } else {
+          scheduleWsReconnect();
+        }
       };
 
       wsConnection.onerror = () => {
@@ -361,6 +481,9 @@
     const personId = alert.person_id ?? "N/A";
     const primaryAction = (alert.evidence?.primary_action ?? alert.action ?? "").toLowerCase();
     const riskScore = typeof alert.risk_score === "number" ? alert.risk_score : 0.95;
+    // Alerts without camera_id come from the primary camera (big video); others from an extra camera tile
+    const fromExtraCamera = Boolean(alert.camera_id);
+    const cameraLabel = alert.camera_name || "Camera chính";
 
     // Phân loại: Nguy cơ té ngã vs Hành vi bất thường
     const isFallRisk = (
@@ -375,12 +498,13 @@
     // 1. Show flash emergency banner
     elEmergencyBar.style.display = "block";
     const alertTypeLabel = isFallRisk ? "NGUY CƠ TÉ NGÃ KHẨN CẤP" : "HÀNH VI BẤT THƯỜNG";
-    elAlertBarDesc.textContent = `[${alertTypeLabel}] Đối tượng ID: #${personId} — ${primaryAction.toUpperCase()} (Điểm rủi ro: ${riskScore.toFixed(2)}). Possible medical emergency / abnormal behavior detected. Please check the person.`;
+    elAlertBarDesc.textContent = `[${alertTypeLabel}] ${cameraLabel} — Đối tượng ID: #${personId} — ${primaryAction.toUpperCase()} (Điểm rủi ro: ${riskScore.toFixed(2)}). Possible medical emergency / abnormal behavior detected. Please check the person.`;
 
-    // 2. Hiện khung viền màu đỏ chớp nháy cảnh báo & Floating badge trên video
-    if (elVideoContainer) elVideoContainer.classList.add("fall-emergency-border");
-    if (elVideoCard) elVideoCard.classList.add("fall-emergency-border");
-    if (elVideoFallBadge) {
+    // 2. Hiện khung viền màu đỏ chớp nháy cảnh báo & Floating badge trên video (hoặc trên ô camera thêm)
+    if (fromExtraCamera) flashExtraCameraTile(alert.camera_id);
+    if (!fromExtraCamera && elVideoContainer) elVideoContainer.classList.add("fall-emergency-border");
+    if (!fromExtraCamera && elVideoCard) elVideoCard.classList.add("fall-emergency-border");
+    if (!fromExtraCamera && elVideoFallBadge) {
       elVideoFallBadge.style.display = "flex";
       if (elVideoFallText) {
         elVideoFallText.textContent = isFallRisk
@@ -425,7 +549,7 @@
         <td><span class="id-tag">#${String(alertCount + 1).padStart(3, '0')}</span></td>
         <td>${new Date().toLocaleTimeString()}</td>
         <td><span class="badge-type-danger">${isFallRisk ? "Té ngã" : "Bất thường"}</span></td>
-        <td>Camera 01</td>
+        <td>${escapeHtml(cameraLabel)}</td>
         <td><span class="badge-state-pending">Đang xử lý</span></td>
       `;
       elAlertsTbody.prepend(tr);
@@ -449,10 +573,11 @@
       btn.textContent = "▶ Xem đoạn video té ngã";
       return;
     }
-    const url = `${API_BASE}/events/${encodeURIComponent(eventId)}/clip`;
+    const token = getSavedToken();
+    const url = `${API_BASE}/events/${encodeURIComponent(eventId)}/clip${token ? `?token=${encodeURIComponent(token)}` : ""}`;
     btn.disabled = true;
     try {
-      const res = await fetch(`${API_BASE}/events/${encodeURIComponent(eventId)}`);
+      const res = await apiFetch(`${API_BASE}/events/${encodeURIComponent(eventId)}`);
       const info = res.ok ? await res.json() : null;
       if (!info || !info.clip_available) {
         const msg = info
@@ -506,7 +631,7 @@
       <div class="alert-item-header">
         <div class="alert-item-title">
           <span>🚨</span>
-          <span>Đối tượng #${alert.person_id} — ${action.toUpperCase()}</span>
+          <span>${alert.camera_name ? `${escapeHtml(alert.camera_name)} · ` : ""}Đối tượng #${alert.person_id} — ${escapeHtml(action.toUpperCase())}</span>
         </div>
         <div class="alert-item-header-actions">
           <span class="alert-item-time">${timestamp}</span>
@@ -567,7 +692,7 @@
         dropdownMenu.classList.remove("show");
         btnMenu.classList.remove("active");
 
-        const ok = window.confirm(`Bạn có chắc muốn xóa vĩnh viễn cảnh báo này khỏi hệ thống không?`);
+        const ok = window.confirm(`Bán có chắc muốn xóa vĩnh viễn cảnh báo này khỏi hệ thống không?`);
         if (!ok) return;
 
         await deleteSingleAlertPermanently(eventId, card);
@@ -585,7 +710,7 @@
   let lastConnState = null;
   async function pollStatus() {
     try {
-      const res = await fetch(`${API_BASE}/status`);
+      const res = await apiFetch(`${API_BASE}/status`);
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
 
@@ -620,9 +745,8 @@
         if (elOfflineOverlay) elOfflineOverlay.style.display = "none";
         
         // Ensure stream URL is attached
-        const streamUrl = `${API_BASE}/stream/mjpeg`;
         if (!elVideoStream.src || elVideoStream.src.indexOf("/stream/mjpeg") === -1) {
-          elVideoStream.src = streamUrl;
+          elVideoStream.src = buildMjpegUrl();
         }
       } else {
         if (elBtnCamToggleTxt) elBtnCamToggleTxt.textContent = "BẬT STREAM";
@@ -637,8 +761,7 @@
 
       // Update simulated or active persons in table
       updatePersonTable(data.tracked_persons_count);
-
-    } catch (err) {
+    } catch (_) {
       elBackendDot.className = "badge-dot dot-offline";
       elBackendText.textContent = "API: Mất kết nối";
       elOfflineOverlay.style.display = "flex";
@@ -647,7 +770,7 @@
 
   async function pollHealth() {
     try {
-      const res = await fetch(`${API_BASE}/health`);
+      const res = await apiFetch(`${API_BASE}/health`);
       if (!res.ok) return;
       const data = await res.json();
 
@@ -711,7 +834,7 @@
   // 8. Fetch Historical Events on Load
   async function fetchHistoricalEvents() {
     try {
-      const res = await fetch(`${API_BASE}/events?limit=20`);
+      const res = await apiFetch(`${API_BASE}/events?limit=20`);
       if (!res.ok) return;
       const events = await res.json();
       if (Array.isArray(events) && events.length > 0) {
@@ -727,7 +850,7 @@
     if (isCameraRunning) {
       // Auto-reattach with cache buster after brief network pause
       setTimeout(() => {
-        elVideoStream.src = `${API_BASE}/stream/mjpeg?t=${Date.now()}`;
+        elVideoStream.src = buildMjpegUrl();
       }, 800);
     } else {
       elOfflineOverlay.style.display = "flex";
@@ -780,7 +903,7 @@
       elBtnTestRtsp.textContent = "⏳ Đang thử...";
       showCamFeedback("Đang thử kết nối tới camera (tối đa ~10 giây với camera ở xa)...", "info", 0);
       try {
-        const res = await fetch(`${API_BASE}/camera/test`, {
+        const res = await apiFetch(`${API_BASE}/camera/test`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rtsp_url: url, ...readRtspCredentials() }),
@@ -808,7 +931,7 @@
         elBtnScanWebcams.disabled = true;
         elBtnScanWebcams.textContent = "⏳ Đang quét...";
       }
-      const res = await fetch(`${API_BASE}/camera/devices`);
+      const res = await apiFetch(`${API_BASE}/camera/devices`);
       if (!res.ok) return;
       const devices = await res.json();
       if (Array.isArray(devices) && devices.length > 0) {
@@ -834,7 +957,7 @@
   // Fetch Active Camera Status & Information
   async function fetchCameraInfo() {
     try {
-      const res = await fetch(`${API_BASE}/camera/info`);
+      const res = await apiFetch(`${API_BASE}/camera/info`);
       if (!res.ok) return;
       const info = await res.json();
       if (info) {
@@ -935,7 +1058,7 @@
     showCamFeedback("Đang giải phóng camera cũ và kết nối nguồn mới...", "info", 0);
 
     try {
-      const res = await fetch(`${API_BASE}/camera/switch`, {
+      const res = await apiFetch(`${API_BASE}/camera/switch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -963,7 +1086,7 @@
         // Reload MJPEG stream with cachebuster
         setTimeout(() => {
           if (elVideoStream) {
-            elVideoStream.src = `${API_BASE}/stream/mjpeg?t=${Date.now()}`;
+            elVideoStream.src = buildMjpegUrl();
           }
           pollStatus();
         }, 400);
@@ -995,7 +1118,7 @@
   async function toggleCamera() {
     if (isCameraRunning) {
       try {
-        await fetch(`${API_BASE}/camera/stop`, { method: "POST" });
+        await apiFetch(`${API_BASE}/camera/stop`, { method: "POST" });
         isCameraRunning = false;
         if (elVideoStream) elVideoStream.src = "";
         if (elOfflineOverlay) elOfflineOverlay.style.display = "flex";
@@ -1016,7 +1139,7 @@
   if (elBtnRefreshStream) {
     elBtnRefreshStream.addEventListener("click", () => {
       if (elVideoStream) {
-        elVideoStream.src = `${API_BASE}/stream/mjpeg?t=${Date.now()}`;
+        elVideoStream.src = buildMjpegUrl();
         showCamFeedback("Đã tải lại luồng hiển thị video.", "info", 2000);
       }
     });
@@ -1034,7 +1157,7 @@
   async function deleteSingleAlertPermanently(eventId, cardElement) {
     if (eventId) {
       try {
-        await fetch(`${API_BASE}/events/${encodeURIComponent(eventId)}`, { method: "DELETE" });
+        await apiFetch(`${API_BASE}/events/${encodeURIComponent(eventId)}`, { method: "DELETE" });
       } catch (err) {
         console.warn("[Dashboard] Lỗi kết nối khi xóa sự kiện trên server:", err);
       }
@@ -1100,7 +1223,7 @@
     updateRiskKpi(0.05, "BÌNH THƯỜNG");
 
     try {
-      await fetch(`${API_BASE}/events/clear`, { method: "POST" });
+      await apiFetch(`${API_BASE}/events/clear`, { method: "POST" });
       console.log("[Dashboard] Toàn bộ dữ liệu cảnh báo đã được xóa vĩnh viễn trên Server.");
     } catch (err) {
       console.warn("[Dashboard] Lỗi khi gửi yêu cầu xóa vĩnh viễn lên server:", err);
@@ -1285,7 +1408,7 @@
   // 1. Khởi động cùng Windows
   async function fetchAutostartStatus() {
     try {
-      const res = await fetch(`${API_BASE}/api/settings/autostart`);
+      const res = await apiFetch(`${API_BASE}/api/settings/autostart`);
       if (res.ok) {
         const data = await res.json();
         if (elToggleAutostart) elToggleAutostart.checked = !!data.enabled;
@@ -1309,7 +1432,7 @@
     elToggleAutostart.addEventListener("change", async () => {
       const enabled = elToggleAutostart.checked;
       try {
-        const res = await fetch(`${API_BASE}/api/settings/autostart?enable=${enabled}`, { method: "POST" });
+        const res = await apiFetch(`${API_BASE}/api/settings/autostart?enable=${enabled}`, { method: "POST" });
         const data = await res.json();
         updateAutostartPill(data.enabled);
         if (elAutostartFeedback) {
@@ -1334,7 +1457,7 @@
       elBtnCheckCamera.disabled = true;
       elBtnCheckCamera.innerHTML = "<span>⏳</span> Đang kiểm tra...";
       try {
-        const res = await fetch(`${API_BASE}/api/settings/check-camera`, { method: "POST" });
+        const res = await apiFetch(`${API_BASE}/api/settings/check-camera`, { method: "POST" });
         const data = await res.json();
         if (elCameraCheckFeedback) {
           elCameraCheckFeedback.style.display = "block";
@@ -1362,7 +1485,7 @@
   if (elBtnOpenWinCamera) {
     elBtnOpenWinCamera.addEventListener("click", async () => {
       try {
-        await fetch(`${API_BASE}/api/settings/open-camera-settings`, { method: "POST" });
+        await apiFetch(`${API_BASE}/api/settings/open-camera-settings`, { method: "POST" });
       } catch (_) {}
     });
   }
@@ -1372,7 +1495,7 @@
     elToggleFaceBlur.addEventListener("change", async () => {
       const blur = elToggleFaceBlur.checked;
       try {
-        await fetch(`${API_BASE}/api/camera/blur?enabled=${blur}`, { method: "POST" });
+        await apiFetch(`${API_BASE}/api/camera/blur?enabled=${blur}`, { method: "POST" });
         const elBlurStatus = document.getElementById("hud-blur-status");
         if (elBlurStatus) {
           elBlurStatus.textContent = blur ? "MẶT: ĐÃ LÀM MỜ" : "MẶT: RÕ NÉT (KHÔNG LÀM MỜ)";
@@ -1424,13 +1547,13 @@
 
   async function fetchTelegramSettings() {
     try {
-      const res = await fetch(`${API_BASE}/api/settings/telegram`);
+      const res = await apiFetch(`${API_BASE}/api/settings/telegram`);
       if (res.ok) applyTelegramSettings(await res.json());
     } catch (_) {}
   }
 
   async function postTelegram(path, body) {
-    const res = await fetch(`${API_BASE}/api/settings/telegram${path}`, {
+    const res = await apiFetch(`${API_BASE}/api/settings/telegram${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -1509,7 +1632,7 @@
       elBtnModalShutdown.disabled = true;
       elBtnModalShutdown.textContent = "Đang tắt hệ thống...";
       try {
-        await fetch(`${API_BASE}/api/system/shutdown`, { method: "POST" });
+        await apiFetch(`${API_BASE}/api/system/shutdown`, { method: "POST" });
         alert("Hệ thống đã dừng an toàn! Bạn có thể đóng cửa sổ trình duyệt này.");
         window.close();
       } catch (_) {
@@ -1576,18 +1699,441 @@
   });
 
 
-  // 10. Initialization Sequence
-  connectAlertsWebSocket();
-  fetchHistoricalEvents();
-  fetchCameraDevices();
-  fetchCameraInfo();
-  pollStatus();
-  pollHealth();
-  fetchAutostartStatus();
+  // ============================================================================
+  // CAMERA KHÁC (ĐA CAMERA): mỗi camera thêm có AI, theo dõi và cảnh báo riêng
+  // ============================================================================
+  const elExtraCamGrid = document.getElementById("extra-cam-grid");
+  const elExtraCamEmpty = document.getElementById("extra-cam-empty");
+  const elExtraCamCount = document.getElementById("extra-cam-count");
+  const elExtraCamForm = document.getElementById("extra-cam-form");
+  const elBtnExtraCamToggleForm = document.getElementById("btn-extra-cam-toggle-form");
+  const elBtnExtraCamCancel = document.getElementById("btn-extra-cam-cancel");
+  const elBtnExtraCamAdd = document.getElementById("btn-extra-cam-add");
+  const elBtnExtraCamTest = document.getElementById("btn-extra-cam-test");
+  const elExtraCamName = document.getElementById("extra-cam-name");
+  const elExtraCamType = document.getElementById("extra-cam-type");
+  const elExtraCamUrl = document.getElementById("extra-cam-url");
+  const elExtraCamUser = document.getElementById("extra-cam-user");
+  const elExtraCamPass = document.getElementById("extra-cam-pass");
+  const elExtraCamDevice = document.getElementById("extra-cam-device");
+  const elExtraCamRtspRow = document.getElementById("extra-cam-rtsp-row");
+  const elExtraCamWebcamRow = document.getElementById("extra-cam-webcam-row");
+  const elExtraCamFeedback = document.getElementById("extra-cam-feedback");
 
-  // Polling intervals
-  setInterval(pollStatus, 1500);
-  setInterval(pollHealth, 4000);
+  const extraCamTiles = new Map();         // camera id -> { tile, img, offline, meta }
+  const extraCamAlertUntil = new Map();    // camera id -> time until which the tile flashes red
+  let extraCamFeedbackTimer = null;
 
-  console.log("[Dashboard] Initialized successfully. Connected to API:", API_BASE);
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+    ));
+  }
+
+  // Same scheme as buildMjpegUrl (cache-buster only)
+  function buildExtraCamStreamUrl(camId) {
+    const token = getSavedToken();
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
+    return `${API_BASE}/api/cameras/${encodeURIComponent(camId)}/stream?t=${Date.now()}${tokenParam}`;
+  }
+
+  function showExtraCamFeedback(msg, type = "info", duration = 5000) {
+    if (!elExtraCamFeedback) return;
+    if (extraCamFeedbackTimer) clearTimeout(extraCamFeedbackTimer);
+    elExtraCamFeedback.className = `cam-toast-feedback toast-${type}`;
+    elExtraCamFeedback.innerHTML = `<span>${type === "success" ? "✅" : (type === "error" ? "❌" : "ℹ️")}</span> <span>${escapeHtml(msg)}</span>`;
+    elExtraCamFeedback.style.display = "flex";
+    if (duration > 0) {
+      extraCamFeedbackTimer = setTimeout(() => { elExtraCamFeedback.style.display = "none"; }, duration);
+    }
+  }
+
+  function createExtraCamTile(cam) {
+    const tile = document.createElement("div");
+    tile.className = "extra-cam-tile";
+    tile.dataset.cameraId = cam.id;
+    tile.innerHTML = `
+      <div class="extra-cam-video">
+        <img alt="Camera ${escapeHtml(cam.name)}">
+        <div class="extra-cam-offline">Đang kết nối…</div>
+      </div>
+      <div class="extra-cam-footer">
+        <span class="extra-cam-name" title="${escapeHtml(cam.name)}">${escapeHtml(cam.name)}</span>
+        <span class="extra-cam-meta"></span>
+        <button type="button" class="btn-extra-cam-remove" title="Xóa camera này">🗑️ Xóa</button>
+      </div>
+    `;
+    const entry = {
+      tile,
+      img: tile.querySelector("img"),
+      offline: tile.querySelector(".extra-cam-offline"),
+      meta: tile.querySelector(".extra-cam-meta"),
+    };
+    // A dropped MJPEG connection is re-opened on the next poll
+    entry.img.addEventListener("error", () => entry.img.removeAttribute("src"));
+    tile.querySelector(".btn-extra-cam-remove").addEventListener("click", () => removeExtraCamera(cam.id, cam.name));
+    return entry;
+  }
+
+  function updateExtraCamTile(entry, cam) {
+    const flashing = cam.emergency || (extraCamAlertUntil.get(cam.id) || 0) > Date.now();
+    entry.tile.classList.toggle("is-emergency", Boolean(flashing));
+
+    if (cam.online) {
+      entry.offline.style.display = "none";
+    } else {
+      const conn = cam.connection;
+      let text = "Đang kết nối…";
+      if (cam.enabled === false) text = "Camera đang tắt";
+      else if (conn && conn.state === "reconnecting") {
+        text = `Mất kết nối, đang tự kết nối lại${conn.reconnect_attempts ? ` (lần thử ${conn.reconnect_attempts})` : ""}…`;
+      } else if (cam.last_frame_age_s != null) text = "Mất tín hiệu camera";
+      entry.offline.textContent = text;
+      entry.offline.style.display = "flex";
+    }
+    if (!entry.img.getAttribute("src") && cam.enabled !== false) {
+      entry.img.src = buildExtraCamStreamUrl(cam.id);
+    }
+
+    const dotClass = flashing ? "alert" : (cam.online ? "on" : "");
+    const label = cam.online ? `${cam.tracked_persons ?? 0} người` : "Ngoại tuyến";
+    entry.meta.innerHTML = `<span class="dot ${dotClass}"></span>${escapeHtml(label)}`;
+  }
+
+  async function fetchExtraCameras() {
+    if (!elExtraCamGrid) return;
+    try {
+      const res = await apiFetch(`${API_BASE}/api/cameras`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const cameras = data.cameras || [];
+      const maxCams = data.max_cameras || 0;
+
+      if (elExtraCamCount) elExtraCamCount.textContent = `${cameras.length}/${maxCams}`;
+      if (elBtnExtraCamToggleForm) elBtnExtraCamToggleForm.disabled = maxCams > 0 && cameras.length >= maxCams;
+      if (elExtraCamEmpty) elExtraCamEmpty.style.display = cameras.length ? "none" : "block";
+
+      const elCamsOnline = document.getElementById("stat-cameras-online");
+      if (elCamsOnline) {
+        const online = (data.primary && data.primary.online ? 1 : 0) + cameras.filter(c => c.online).length;
+        elCamsOnline.textContent = online;
+      }
+
+      const seen = new Set();
+      cameras.forEach(cam => {
+        seen.add(cam.id);
+        let entry = extraCamTiles.get(cam.id);
+        if (!entry) {
+          entry = createExtraCamTile(cam);
+          extraCamTiles.set(cam.id, entry);
+          elExtraCamGrid.appendChild(entry.tile);
+        }
+        updateExtraCamTile(entry, cam);
+      });
+      for (const [id, entry] of extraCamTiles) {
+        if (!seen.has(id)) {
+          entry.img.removeAttribute("src");
+          entry.tile.remove();
+          extraCamTiles.delete(id);
+        }
+      }
+    } catch (e) {
+      // API offline: pollStatus already shows the backend state
+    }
+  }
+
+  async function removeExtraCamera(camId, camName) {
+    if (!window.confirm(`Xóa camera "${camName}" khỏi danh sách giám sát?`)) return;
+    try {
+      const res = await apiFetch(`${API_BASE}/api/cameras/${encodeURIComponent(camId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.detail || "Không xóa được camera.");
+      }
+    } finally {
+      fetchExtraCameras();
+    }
+  }
+
+  function readExtraCamForm() {
+    const sourceType = elExtraCamType ? elExtraCamType.value : "rtsp";
+    const body = { name: elExtraCamName ? elExtraCamName.value.trim() : "", source_type: sourceType };
+    if (sourceType === "webcam") {
+      body.device_index = parseInt(elExtraCamDevice ? elExtraCamDevice.value : "1", 10) || 0;
+    } else {
+      body.rtsp_url = elExtraCamUrl ? elExtraCamUrl.value.trim() : "";
+      if (elExtraCamUser && elExtraCamUser.value.trim()) body.rtsp_username = elExtraCamUser.value.trim();
+      if (elExtraCamPass && elExtraCamPass.value) body.rtsp_password = elExtraCamPass.value;
+    }
+    return body;
+  }
+
+  function setExtraCamFormVisible(visible) {
+    if (!elExtraCamForm) return;
+    elExtraCamForm.style.display = visible ? "block" : "none";
+    if (!visible) {
+      elExtraCamForm.reset();
+      handleExtraCamTypeChange();
+      if (elExtraCamFeedback) elExtraCamFeedback.style.display = "none";
+    } else if (elExtraCamName) {
+      elExtraCamName.focus();
+    }
+  }
+
+  function handleExtraCamTypeChange() {
+    const isWebcam = elExtraCamType && elExtraCamType.value === "webcam";
+    if (elExtraCamRtspRow) elExtraCamRtspRow.style.display = isWebcam ? "none" : "flex";
+    if (elExtraCamWebcamRow) elExtraCamWebcamRow.style.display = isWebcam ? "flex" : "none";
+  }
+
+  if (elExtraCamType) elExtraCamType.addEventListener("change", handleExtraCamTypeChange);
+  if (elBtnExtraCamToggleForm) {
+    elBtnExtraCamToggleForm.addEventListener("click", () => {
+      setExtraCamFormVisible(elExtraCamForm && elExtraCamForm.style.display === "none");
+    });
+  }
+  if (elBtnExtraCamCancel) elBtnExtraCamCancel.addEventListener("click", () => setExtraCamFormVisible(false));
+
+  if (elBtnExtraCamTest) {
+    elBtnExtraCamTest.addEventListener("click", async () => {
+      const body = readExtraCamForm();
+      if (!body.rtsp_url) {
+        showExtraCamFeedback("Vui lòng nhập đường dẫn camera trước khi kiểm tra.", "error");
+        return;
+      }
+      elBtnExtraCamTest.disabled = true;
+      elBtnExtraCamTest.textContent = "⏳ Đang thử...";
+      showExtraCamFeedback("Đang thử kết nối tới camera (tối đa ~10 giây với camera ở xa)...", "info", 0);
+      try {
+        const res = await apiFetch(`${API_BASE}/camera/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rtsp_url: body.rtsp_url, rtsp_username: body.rtsp_username, rtsp_password: body.rtsp_password }),
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) showExtraCamFeedback(`${data.message} (kết nối mất ${data.connect_ms} ms)`, "success", 6000);
+        else showExtraCamFeedback(data.message || data.detail || "Không kết nối được camera.", "error", 7000);
+      } catch (e) {
+        showExtraCamFeedback("Lỗi kết nối tới Backend API: " + e.message, "error");
+      } finally {
+        elBtnExtraCamTest.disabled = false;
+        elBtnExtraCamTest.textContent = "Kiểm tra";
+      }
+    });
+  }
+
+  if (elExtraCamForm) {
+    elExtraCamForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const body = readExtraCamForm();
+      if (body.source_type === "rtsp" && !body.rtsp_url) {
+        showExtraCamFeedback("Vui lòng nhập đường dẫn camera.", "error");
+        return;
+      }
+      elBtnExtraCamAdd.disabled = true;
+      elBtnExtraCamAdd.textContent = "⏳ ĐANG THÊM...";
+      try {
+        const res = await apiFetch(`${API_BASE}/api/cameras`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setExtraCamFormVisible(false);
+          fetchExtraCameras();
+        } else {
+          showExtraCamFeedback(data.detail || "Không thêm được camera.", "error", 8000);
+        }
+      } catch (e) {
+        showExtraCamFeedback("Lỗi kết nối tới Backend API: " + e.message, "error");
+      } finally {
+        elBtnExtraCamAdd.disabled = false;
+        elBtnExtraCamAdd.textContent = "THÊM CAMERA";
+      }
+    });
+  }
+
+  // Alert from an extra camera: flash that camera's tile for 10 s
+  function flashExtraCameraTile(camId) {
+    extraCamAlertUntil.set(camId, Date.now() + 10000);
+    const entry = extraCamTiles.get(camId);
+    if (entry) {
+      entry.tile.classList.add("is-emergency");
+      entry.tile.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    setTimeout(fetchExtraCameras, 10050);
+  }
+
+  // ========================================================================
+  // 10. Authentication Flow & Dashboard Initialization
+  // ========================================================================
+  function initDashboard() {
+    if (isDashboardInitialized) return;
+    isDashboardInitialized = true;
+
+    // Attach stream feed with auth token
+    if (elVideoStream && (!elVideoStream.src || elVideoStream.src === window.location.href)) {
+      elVideoStream.src = buildMjpegUrl();
+    }
+
+    connectAlertsWebSocket();
+    fetchHistoricalEvents();
+    fetchCameraDevices();
+    fetchCameraInfo();
+    pollStatus();
+    pollHealth();
+    fetchAutostartStatus();
+
+    // Polling intervals
+    setInterval(pollStatus, 1500);
+    setInterval(pollHealth, 4000);
+    fetchExtraCameras();
+    setInterval(fetchExtraCameras, 3000);
+
+    console.log("[Dashboard] Initialized successfully. Connected to API:", API_BASE);
+  }
+
+  // status: /api/auth/status payload. The first admin can only be created on the machine
+  // running the system (or with `python -m src.auth.cli create-admin` on a server).
+  function showAuthModal(status) {
+    if (!elAuthModalBackdrop) return;
+    const setupPendingElsewhere = Boolean(status && status.setup_required && !status.setup_allowed_here);
+    isSetupMode = Boolean(status && status.setup_allowed_here);
+
+    if (isSetupMode) {
+      if (elAuthModalTitle) elAuthModalTitle.textContent = "Thiết Lập Bảo Vệ (Lần Đầu)";
+      if (elAuthModalSubtitle) {
+        elAuthModalSubtitle.textContent =
+          "Tạo tài khoản quản trị một lần duy nhất (mật khẩu tối thiểu 8 ký tự) để các thiết bị khác trong mạng có thể đăng nhập xem camera.";
+      }
+      if (elAuthSubmitTxt) elAuthSubmitTxt.textContent = "Tạo Tài Khoản & Ghi Nhớ Thiết Bị";
+    } else {
+      if (elAuthModalTitle) elAuthModalTitle.textContent = "Xác Thực Bảo Mật Mạng Nội Bộ";
+      if (elAuthModalSubtitle) {
+        elAuthModalSubtitle.textContent =
+          "Thiết bị này đang kết nối từ mạng nội bộ (Wi-Fi/LAN). Vui lòng đăng nhập để xem camera và nhận cảnh báo an toàn. Tài khoản sẽ được ghi nhớ trực tiếp trên máy này.";
+      }
+      if (elAuthSubmitTxt) elAuthSubmitTxt.textContent = "Đăng Nhập & Ghi Nhớ Thiết Bị";
+    }
+
+    if (elAuthError) {
+      elAuthError.style.display = "none";
+      elAuthError.textContent = "";
+      if (setupPendingElsewhere) {
+        elAuthError.textContent = "Chưa có tài khoản quản trị. Hãy tạo tài khoản trên chính máy tính chạy hệ thống (mở http://localhost:8000 trên máy đó), rồi đăng nhập tại đây.";
+        elAuthError.style.display = "block";
+      }
+    }
+    elAuthModalBackdrop.style.display = "flex";
+    if (elAuthUsername) elAuthUsername.focus();
+  }
+
+  function handleAuthRequired() {
+    fetch(`${API_BASE}/api/auth/status`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.can_access_without_login) {
+          showAuthModal(data);
+        }
+      })
+      .catch(() => {});
+  }
+
+  if (elAuthForm) {
+    elAuthForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = elAuthUsername ? elAuthUsername.value.trim() : "";
+      const password = elAuthPassword ? elAuthPassword.value.trim() : "";
+
+      if (!username || !password) {
+        if (elAuthError) {
+          elAuthError.textContent = "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.";
+          elAuthError.style.display = "block";
+        }
+        return;
+      }
+
+      if (elBtnAuthSubmit) elBtnAuthSubmit.disabled = true;
+      if (elAuthSubmitTxt) elAuthSubmitTxt.textContent = "Đang xử lý...";
+      if (elAuthError) elAuthError.style.display = "none";
+
+      const endpoint = isSetupMode ? "/api/auth/setup" : "/api/auth/login";
+      try {
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        const json = await res.json();
+        if (res.ok && json.access_token) {
+          saveAuthToken(json.access_token);
+          saveRefreshToken(json.refresh_token);
+          if (elAuthModalBackdrop) elAuthModalBackdrop.style.display = "none";
+          // Reload camera stream and initialize dashboard
+          if (elVideoStream) elVideoStream.src = buildMjpegUrl();
+          initDashboard();
+        } else {
+          if (elAuthError) {
+            elAuthError.textContent = json.detail || "Đăng nhập không thành công. Vui lòng kiểm tra lại.";
+            elAuthError.style.display = "block";
+          }
+        }
+      } catch (err) {
+        if (elAuthError) {
+          elAuthError.textContent = "Lỗi kết nối đến máy chủ: " + err.message;
+          elAuthError.style.display = "block";
+        }
+      } finally {
+        if (elBtnAuthSubmit) elBtnAuthSubmit.disabled = false;
+        if (elAuthSubmitTxt) {
+          elAuthSubmitTxt.textContent = isSetupMode
+            ? "Tạo Tài Khoản & Ghi Nhớ Thiết Bị"
+            : "Đăng Nhập & Ghi Nhớ Thiết Bị";
+        }
+      }
+    });
+  }
+
+  // Start sequence with auth check:
+  // - Localhost (127.0.0.1): zero friction, opens and runs immediately!
+  // - LAN/Wi-Fi: checks the saved token (renewed with the refresh token); if not present, shows modal.
+  async function checkAuthAndInit() {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/status`);
+      const data = await res.json();
+
+      if (data.can_access_without_login) {
+        if (elAuthModalBackdrop) elAuthModalBackdrop.style.display = "none";
+        initDashboard();
+        return;
+      }
+
+      const token = getSavedToken();
+      if (token || getRefreshToken()) {
+        let verifyRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (verifyRes.status === 401 && await refreshAccessToken()) {
+          verifyRes = await fetch(`${API_BASE}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${getSavedToken()}` },
+          });
+        }
+        if (verifyRes.ok) {
+          if (elAuthModalBackdrop) elAuthModalBackdrop.style.display = "none";
+          initDashboard();
+          return;
+        } else {
+          clearAuthToken();
+        }
+      }
+
+      showAuthModal(data);
+    } catch (e) {
+      console.warn("[Dashboard] Auth check error, initializing anyway:", e);
+      initDashboard();
+    }
+  }
+
+  checkAuthAndInit();
 })();

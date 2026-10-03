@@ -19,7 +19,13 @@ class AlertManager:
         logger: Optional[EventLogger] = None,
         dispatcher: Optional[NotificationDispatcher] = None,
         clip_recorder: Optional[EventClipRecorder] = None,
+        camera_id: Optional[str] = None,
+        camera_name: Optional[str] = None,
     ) -> None:
+        # Cooldowns, the clip pre-roll and track ids belong to one camera, so every camera
+        # gets its own AlertManager; the event log and dispatcher may be shared between them.
+        self.camera_id = camera_id
+        self.camera_name = camera_name
         self.thresholds = thresholds or ThresholdManager()
         self.logger = logger or EventLogger()
         self.dispatcher = dispatcher or NotificationDispatcher()
@@ -69,13 +75,15 @@ class AlertManager:
         # 1. Start the evidence clip (falls only), log event and save anonymized snapshot
         clip_path = None
         if self.clip_recorder is not None and self.clip_recorder.is_fall(assessment.evidence):
-            clip_path = self.clip_recorder.start_clip(tid, curr_time)
+            clip_path = self.clip_recorder.start_clip(tid, curr_time, camera_id=self.camera_id)
         event = self.logger.log_event(
             person_id=tid,
             risk_score=assessment.risk_score,
             evidence=assessment.evidence,
             frame=frame,
             clip_path=clip_path,
+            camera_id=self.camera_id,
+            camera_name=self.camera_name,
         )
 
         # 2. Dispatch notifications across external channels

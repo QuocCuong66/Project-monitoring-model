@@ -90,3 +90,7 @@ results/
 
 # Runtime log written next to app_runner.py
 app_log.txt
+
+# SSL certificates & keys
+configs/*.pem
+configs/*.key

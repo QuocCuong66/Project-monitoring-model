@@ -16,6 +16,12 @@ websockets>=11.0
 pydantic>=2.0.0
 httpx>=0.24.0
 
+# Authentication & Security (login, JWT, brute-force limits, HTTPS certificate)
+PyJWT>=2.8.0
+bcrypt>=4.0.0
+slowapi>=0.1.9
+cryptography>=41.0.0
+
 # Configuration & Hardware Telemetry
 pyyaml>=6.0.0
 python-dotenv>=1.0.0

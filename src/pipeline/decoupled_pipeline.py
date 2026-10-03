@@ -133,8 +133,14 @@ class DecoupledPipeline:
         anomaly_interval: int = 5,  # Run heavy Autoencoder every 5 temporal ticks
         action_classifier: Optional[ActionClassifier] = None,
         anomaly_detector: Optional[ReconstructionAnomalyScorer] = None,
+        pose_estimator: Optional[Any] = None,
+        alert_manager: Optional[AlertManager] = None,
+        inference_lock: Optional[threading.Lock] = None,
     ) -> None:
         self.anomaly_interval = anomaly_interval
+        # Serializes calls into the (possibly shared) neural models: one model instance is
+        # not safe to run from several camera workers at once, and sharing it keeps VRAM flat.
+        self.inference_lock = inference_lock or threading.Lock()
 
         # Load configs
         model_cfg = load_config("model.yaml")
@@ -174,7 +180,9 @@ class DecoupledPipeline:
         pose_cfg = model_cfg.get("pose", {})
         arch = pose_cfg.get("architecture", "yolov8_pose")
         model_str = str(model_name)
-        if model_str.endswith(".engine") or model_str.endswith(".onnx") or arch in ["rtmo_s", "rtmo_pose"]:
+        if pose_estimator is not None:
+            self.pose_estimator = pose_estimator
+        elif model_str.endswith(".engine") or model_str.endswith(".onnx") or arch in ["rtmo_s", "rtmo_pose"]:
             from src.pose.rtmo_estimator import RTMOPoseEstimator
             actual_path = resolve_model_path(model_name)
             if actual_path is None or not actual_path.exists():
@@ -270,7 +278,7 @@ class DecoupledPipeline:
         self._prev_track_bboxes: Dict[int, Tuple[float, float, float, float]] = {}
 
         # 7. Alert Manager
-        self.alert_manager = AlertManager(self.thresholds)
+        self.alert_manager = alert_manager or AlertManager(self.thresholds)
 
         # 8. Visualizer & Telemetry
         self.visualizer = PipelineVisualizer(infer_cfg.get("display", {}))
@@ -293,6 +301,34 @@ class DecoupledPipeline:
         self._last_assessments: Dict[int, RiskAssessment] = {}
         # (keypoints, bbox) of everyone in the last perceived frame, for anonymizing clip frames
         self._last_people: List[Tuple[Optional[np.ndarray], Tuple[float, float, float, float]]] = []
+
+    def create_camera_session(self, camera_id: str, camera_name: str) -> "DecoupledPipeline":
+        """Pipeline for another camera that reuses this pipeline's loaded models.
+
+        Tracker, temporal buffers, gates, risk state machine, alert cooldowns and the fall-clip
+        pre-roll are per camera (track ids from two rooms must never mix); the pose / temporal /
+        anomaly models, their inference lock, the event log and the notification dispatcher
+        (Telegram, WebSocket) are shared, so an extra camera costs no extra VRAM.
+        """
+        alert_manager = AlertManager(
+            logger=self.alert_manager.logger,
+            dispatcher=self.alert_manager.dispatcher,
+            camera_id=camera_id,
+            camera_name=camera_name,
+        )
+        session = DecoupledPipeline(
+            device=self.device,
+            half=self.half,
+            ai_stride=self.ai_stride,
+            anomaly_interval=self.anomaly_interval,
+            action_classifier=self.action_classifier,
+            anomaly_detector=self.anomaly_detector,
+            pose_estimator=self.pose_estimator,
+            alert_manager=alert_manager,
+            inference_lock=self.inference_lock,
+        )
+        session.blur_faces = self.blur_faces
+        return session
 
     def start(self) -> None:
         """Start background AI inference thread."""
@@ -372,7 +408,8 @@ class DecoupledPipeline:
         self.ai_profiler.start_frame()
 
         # 1. Single-Pass Perception (YOLO-Pose extracts both BBoxes & Skeletons)
-        detections, single_pass_items = self.pose_estimator.detect_and_estimate_single_pass(packet.frame)
+        with self.inference_lock:
+            detections, single_pass_items = self.pose_estimator.detect_and_estimate_single_pass(packet.frame)
 
 
         # 2. ByteTrack with Fall Protection
@@ -505,9 +542,10 @@ class DecoupledPipeline:
                 # kinematic gate, so with enable_gated_ai off the tiny model runs every tick.
                 if gate_res.should_run_ai or not self.gated_ai:
                     # Tier 2: Deep AI Inference (Gate OPEN: Hard fall, slow slide, Z-axis fall, or hold-on timer)
-                    action_pred = self.action_classifier.predict(seq, kinematics=kinematics)
-                    if self._temporal_tick_count % self.anomaly_interval == 0 or tid not in self._last_anomaly:
-                        self._last_anomaly[tid] = self.anomaly_detector.score(seq)
+                    with self.inference_lock:
+                        action_pred = self.action_classifier.predict(seq, kinematics=kinematics)
+                        if self._temporal_tick_count % self.anomaly_interval == 0 or tid not in self._last_anomaly:
+                            self._last_anomaly[tid] = self.anomaly_detector.score(seq)
                     anomaly_res = self._last_anomaly[tid]
                 else:
                     # Gate CLOSED: Normal walking/standing/sitting (~0 ms compute)

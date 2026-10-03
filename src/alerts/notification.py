@@ -57,6 +57,8 @@ class NotificationDispatcher:
         print("\n" + "=" * 70)
         print("🚨 EMERGENCY ALERT TRIGGERED 🚨")
         print(f"Event ID:   {event.event_id}")
+        if event.camera_name:
+            print(f"Camera:     {event.camera_name}")
         print(f"Person ID:  {event.person_id}")
         print(f"Timestamp:  {event.timestamp}")
         print(f"Risk Score: {event.risk_score:.2f}")
@@ -78,8 +80,14 @@ class NotificationDispatcher:
     def _send_telegram(self, event: AlertEvent) -> None:
         settings = self.telegram_settings
         try:
+            # Camera names are typed by the user: escape Markdown so "Phòng_ngủ" cannot break the message
+            camera_line = ""
+            if event.camera_name:
+                safe_name = "".join("\\" + ch if ch in "_*`[" else ch for ch in event.camera_name)
+                camera_line = f"• *Camera:* {safe_name}\n"
             msg_text = (
                 f"🚨 *POSSIBLE MEDICAL EMERGENCY DETECTED*\n\n"
+                f"{camera_line}"
                 f"• *Person ID:* `{event.person_id}`\n"
                 f"• *Risk Score:* `{event.risk_score:.2f}`\n"
                 f"• *Primary Action:* `{event.evidence.get('primary_action', 'unknown')}`\n"

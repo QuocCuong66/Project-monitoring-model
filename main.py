@@ -167,23 +167,32 @@ def initialize_camera_stream(
 
 
 def start_background_web_server(host: str = "0.0.0.0", port: int = 8000) -> None:
-    """Khởi động FastAPI server chạy ngầm trên background daemon thread."""
+    """Khởi động FastAPI server chạy ngầm trên background daemon thread (hỗ trợ SSL/HTTPS)."""
     try:
         import uvicorn
         from src.api.server import app
+        from src.utils.ssl_cert import resolve_ssl_paths
+
+        cert_file, key_file = resolve_ssl_paths()
+        protocol = "https" if cert_file else "http"
 
         def run_server():
-            uvicorn.run(app, host=host, port=port, log_level="warning")
+            kwargs = {
+                "host": host,
+                "port": port,
+                "log_level": "warning",
+            }
+            if cert_file and key_file:
+                kwargs["ssl_certfile"] = cert_file
+                kwargs["ssl_keyfile"] = key_file
+            uvicorn.run(app, **kwargs)
 
         server_thread = threading.Thread(target=run_server, daemon=True, name="WebServerThread")
         server_thread.start()
-        print(f"  • Web API & Dashboard    : [ONLINE] -> http://{host if host != '0.0.0.0' else 'localhost'}:{port}")
-        print(f"  • Swagger API Docs       : http://localhost:{port}/docs")
+        print(f"  • Web API & Dashboard    : [ONLINE] -> {protocol}://{host if host != '0.0.0.0' else 'localhost'}:{port}")
+        print(f"  • Swagger API Docs       : {protocol}://localhost:{port}/docs")
     except Exception as e:
         print(f"  [Notice] Không thể khởi động web server: {e}")
-
-
-from src.camera.multi_camera import MultiCameraManager
 
 
 def initialize_ai_pipeline(blur_faces: bool = False) -> RealtimePipeline:
@@ -203,7 +212,7 @@ def initialize_ai_pipeline(blur_faces: bool = False) -> RealtimePipeline:
 def main() -> None:
     """HÀM CHÍNH — KHỞI CHẠY TOÀN BỘ HỆ THỐNG."""
     parser = argparse.ArgumentParser(description="Fall and Stroke Warning System - Single Master Runner")
-    parser.add_argument("--source", type=str, choices=["webcam", "rtsp", "video", "multi"], default="webcam", help="Nguồn video đầu vào (webcam, rtsp, video, hoặc multi cho nhiều camera)")
+    parser.add_argument("--source", type=str, choices=["webcam", "rtsp", "video"], default="webcam", help="Nguồn video của camera chính (webcam, rtsp, video). Camera thêm: thêm trên giao diện web hoặc configs/camera.yaml extra_cameras")
     parser.add_argument("--device-index", type=int, default=0, help="Device index nếu dùng webcam")
     parser.add_argument("--rtsp-url", type=str, default=None, help="RTSP Stream URL")
     parser.add_argument("--video-path", type=str, default=None, help="Đường dẫn tệp video MP4/AVI")
@@ -262,50 +271,19 @@ def main() -> None:
         except Exception as e:
             print(f"[Warning] Không thể đồng bộ WebSocket dispatcher: {e}")
 
+        # Camera thêm (đa camera): mỗi camera có pipeline riêng, dùng chung mô hình đã nạp
+        try:
+            import src.api.server as srv
+            monitor = srv.init_multi_camera(pipeline, configs["camera"])
+            print(f"  • Camera thêm (đa camera): {len(monitor.list_status())}/{monitor.max_cameras}")
+        except Exception as e:
+            print(f"[Warning] Không thể khởi động camera thêm: {e}")
+
 
     # Cấu hình hiển thị (Mặc định Web-First: tắt cửa sổ desktop OpenCV trừ khi truyền --gui)
     display_cfg = configs["inference"].get("display", {})
     window_name = display_cfg.get("window_name", "Fall and Stroke Warning System - Live HUD Stream")
     show_gui = args.gui and not args.no_gui
-
-    # BƯỚC 5: Xử lý chạy đơn camera hoặc đa camera (Multi-Camera Scalability)
-    if args.source == "multi":
-        print("[5/5] Khởi động chế độ GIÁM SÁT ĐA CAMERA (MULTI-CAMERA GRID)...")
-        cam_list = configs["camera"].get("multi_camera", {}).get("cameras", [])
-        multi_mgr = MultiCameraManager(camera_configs=cam_list)
-        print(f"  • Đã kết nối {len(multi_mgr.streams)} camera đang hoạt động.")
-        print("  • Nhấn [q] hoặc [ESC] trên cửa sổ hình ảnh để dừng lại.\n")
-        print("-" * 80)
-
-        try:
-            while len(multi_mgr.streams) > 0:
-                packets_dict = multi_mgr.read_all(timeout=0.2)
-                annotated_frames = {}
-
-                for cam_id, packet in packets_dict.items():
-                    res = pipeline.process_frame(packet.frame, packet.timestamp)
-                    annotated_frames[cam_id] = res.annotated_frame
-
-                    for alert in res.alerts:
-                        print(f"\n[CẢNH BÁO TỪ {packet.source_name}]")
-                        print(f"  • Đối tượng ID   : {alert.person_id}")
-                        print(f"  • Điểm rủi ro    : {alert.risk_score:.2f}")
-                        print(f"  • Hành động chính: {alert.evidence.get('primary_action')}")
-                        print(f"  • Thông báo      : {alert.message}")
-                        print("-" * 80)
-
-                if show_gui and annotated_frames:
-                    grid_view = multi_mgr.create_grid_display(annotated_frames)
-                    cv2.imshow("Elderly AI Monitor - Multi-Camera Surveillance Grid", grid_view)
-                    key = cv2.waitKey(1) & 0xFF
-                    if key == 27 or key == ord("q"):
-                        break
-        finally:
-            multi_mgr.stop_all()
-            if show_gui:
-                cv2.destroyAllWindows()
-            print("[Success] Hệ thống Multi-Camera đã dừng an toàn.\n")
-            return
 
     # Chế độ Đơn Camera (Single Camera Realtime Pipeline)
     stream = initialize_camera_stream(
@@ -411,6 +389,13 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n[Info] Nhận tín hiệu KeyboardInterrupt (Ctrl+C). Đang tắt hệ thống...")
     finally:
+        if not args.no_server:
+            try:
+                import src.api.server as srv
+                if srv.multi_camera_monitor is not None:
+                    srv.multi_camera_monitor.stop_all()
+            except Exception:
+                pass
         if decoupled_pipe is not None:
             decoupled_pipe.stop()
         if not args.no_server:

@@ -213,13 +213,28 @@ def run_app():
         sys.exit(1)
 
     port = 8000
-    dashboard_url = f"http://localhost:{port}"
+    try:
+        from src.utils.ssl_cert import resolve_ssl_paths
+        cert_file, key_file = resolve_ssl_paths()
+    except Exception:
+        cert_file, key_file = None, None
+    protocol = "https" if cert_file else "http"
+    dashboard_url = f"{protocol}://localhost:{port}"
 
     # 2. Khởi động Web API Server trên background thread (với log_config=None để tương thích hoàn toàn môi trường no-console)
-    print("[*] Đang khởi động Web Server API...")
+    print(f"[*] Đang khởi động Web Server API ({protocol.upper()})...")
     def _run_custom_uvicorn():
         import uvicorn
-        uvicorn.run(srv.app, host="0.0.0.0", port=port, log_level="warning", log_config=None)
+        kwargs = {
+            "host": "0.0.0.0",
+            "port": port,
+            "log_level": "warning",
+            "log_config": None,
+        }
+        if cert_file and key_file:
+            kwargs["ssl_certfile"] = cert_file
+            kwargs["ssl_keyfile"] = key_file
+        uvicorn.run(srv.app, **kwargs)
     threading.Thread(target=_run_custom_uvicorn, daemon=True, name="WebServerThread").start()
 
     # 3. Khởi tạo Pipeline AI
@@ -259,6 +274,12 @@ def run_app():
             srv.external_ingestion_loop = True  # vòng lặp ở bước 7 tự đọc camera
     except Exception as e:
         print(f"[Warning] Đồng bộ WebSocket dispatcher: {e}")
+
+    # Camera thêm (đa camera) đã lưu trên giao diện: mỗi camera có pipeline riêng, dùng chung mô hình
+    try:
+        srv.init_multi_camera(pipeline, configs.get("camera", {}))
+    except Exception as e:
+        print(f"[Warning] Không thể khởi động camera thêm: {e}")
 
     # 4. Khởi tạo Camera Stream: camera người dùng đã "LƯU MẶC ĐỊNH" (%APPDATA%), mặc định Webcam 0
     cam_cfg = configs.get("camera", {})
@@ -313,6 +334,11 @@ def run_app():
                     srv.camera_stream.release()
                 except Exception:
                     pass
+        if srv.multi_camera_monitor is not None:
+            try:
+                srv.multi_camera_monitor.stop_all()
+            except Exception:
+                pass
         if decoupled_pipe is not None:
             try:
                 decoupled_pipe.stop()

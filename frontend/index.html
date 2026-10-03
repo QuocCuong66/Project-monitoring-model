@@ -16,11 +16,12 @@
   <link rel="icon" type="image/png" href="icon.png">
   <link rel="shortcut icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20261001_aligned_grid">
+  <link rel="stylesheet" href="styles.css?v=20261003_multi_camera">
 </head>
 
 <body>
-  <div class="app-container">
+  <div class="app-container" id="app-container">
+
     <!-- Top Navigation Header -->
     <header class="app-header">
       <div class="header-brand">
@@ -229,7 +230,7 @@
 
             <!-- Vùng hiển thị Video Feed -->
             <div class="video-container" id="video-container">
-              <img id="live-video-stream" src="/stream/mjpeg" alt="Live AI Camera Stream"
+              <img id="live-video-stream" src="" alt="Live AI Camera Stream"
                 onerror="this.onerror=null; this.src=''; window.handleStreamError();">
               
               <!-- Overlay Timestamp góc trên bên trái -->
@@ -394,6 +395,60 @@
                 <span id="alerts-count-badge">0 sự kiện ›</span>
               </div>
             </div>
+          </div>
+
+          <!-- ==========================================
+               CAMERA KHÁC (ĐA CAMERA): MỖI CAMERA CÓ AI RIÊNG, TRẢI RỘNG CẢ 2 CỘT
+               ========================================== -->
+          <div class="card extra-cameras-card" id="extra-cameras-card">
+            <div class="card-header">
+              <div class="card-title">
+                <span class="card-title-icon">📹</span>
+                <h2>CAMERA KHÁC</h2>
+                <span class="extra-cam-count" id="extra-cam-count">0/3</span>
+              </div>
+              <button type="button" class="btn-cam-action extra-cam-add-toggle" id="btn-extra-cam-toggle-form">+ Thêm camera</button>
+            </div>
+
+            <form class="extra-cam-form" id="extra-cam-form" style="display: none;" autocomplete="off">
+              <div class="extra-cam-form-grid">
+                <div class="cam-field-group">
+                  <label for="extra-cam-name" class="cam-field-label">Tên / phòng:</label>
+                  <input type="text" id="extra-cam-name" class="cam-input" maxlength="60" placeholder="Ví dụ: Phòng ngủ" spellcheck="false">
+                </div>
+                <div class="cam-field-group">
+                  <label for="extra-cam-type" class="cam-field-label">Loại nguồn:</label>
+                  <select id="extra-cam-type" class="cam-select">
+                    <option value="rtsp">🌐 Camera IP / Camera ở xa (RTSP, HTTP, RTMP)</option>
+                    <option value="webcam">📷 Webcam USB khác</option>
+                  </select>
+                </div>
+              </div>
+              <div class="cam-full-row" id="extra-cam-rtsp-row">
+                <label for="extra-cam-url" class="cam-field-label">Đường dẫn camera:</label>
+                <div class="cam-input-action-row">
+                  <input type="text" id="extra-cam-url" class="cam-input" placeholder="rtsp://192.168.1.101:554/stream1" spellcheck="false">
+                  <button type="button" class="btn-cam-action" id="btn-extra-cam-test">Kiểm tra</button>
+                </div>
+                <div class="cam-input-action-row">
+                  <input type="text" id="extra-cam-user" class="cam-input" placeholder="Tài khoản (tùy chọn)" spellcheck="false">
+                  <input type="password" id="extra-cam-pass" class="cam-input" placeholder="Mật khẩu (tùy chọn)" autocomplete="new-password">
+                </div>
+              </div>
+              <div class="cam-full-row" id="extra-cam-webcam-row" style="display: none;">
+                <label for="extra-cam-device" class="cam-field-label">Số thứ tự webcam:</label>
+                <input type="number" id="extra-cam-device" class="cam-input" min="0" max="9" value="1">
+              </div>
+              <div class="cam-field-hint">Mỗi camera có bộ theo dõi và cảnh báo riêng; các camera dùng chung một GPU nên FPS phân tích của từng camera giảm khi thêm camera.</div>
+              <div class="cam-buttons-row">
+                <button type="submit" class="btn-cam-primary" id="btn-extra-cam-add">THÊM CAMERA</button>
+                <button type="button" class="btn-cam-secondary" id="btn-extra-cam-cancel">HỦY</button>
+              </div>
+              <div class="cam-toast-feedback" id="extra-cam-feedback" style="display: none;"></div>
+            </form>
+
+            <div class="extra-cam-grid" id="extra-cam-grid"></div>
+            <div class="extra-cam-empty" id="extra-cam-empty">Chưa có camera thêm. Bấm “+ Thêm camera” để giám sát thêm phòng khác cùng lúc.</div>
           </div>
 
           <!-- ==========================================
@@ -645,7 +700,45 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <!-- Modal Đăng nhập / Thiết lập bảo mật mạng nội bộ -->
+  <div class="auth-modal-backdrop" id="auth-modal-backdrop" style="display: none;">
+    <div class="auth-modal-card">
+      <div class="auth-modal-header">
+        <div class="auth-icon-badge" id="auth-icon-badge">🔒</div>
+        <h2 id="auth-modal-title">Xác Thực Bảo Mật Mạng Nội Bộ</h2>
+        <p id="auth-modal-subtitle">
+          Thiết bị này đang kết nối từ mạng nội bộ (Wi-Fi/LAN). Vui lòng đăng nhập để xem camera và nhận cảnh báo an toàn.
+        </p>
+      </div>
+
+      <form id="auth-form" class="auth-form" onsubmit="return false;">
+        <div class="auth-input-group">
+          <label for="auth-username-input">Tên đăng nhập</label>
+          <input type="text" id="auth-username-input" class="cam-input" placeholder="admin" required autocomplete="username">
+        </div>
+
+        <div class="auth-input-group">
+          <label for="auth-password-input">Mật khẩu</label>
+          <input type="password" id="auth-password-input" class="cam-input" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+
+        <div class="auth-remember-tip">
+          <span class="tip-icon">💡</span>
+          <span class="tip-text">Thiết bị này tự ghi nhớ đăng nhập; sau 30 ngày không dùng, hoặc khi đổi mật khẩu / đăng xuất, cần đăng nhập lại.</span>
+        </div>
+
+        <div class="auth-error-msg" id="auth-error-msg" style="display: none;"></div>
+
+        <div class="auth-action-row">
+          <button type="submit" id="btn-auth-submit" class="btn-modal-action btn-auth-submit">
+            <span id="auth-submit-txt">Đăng Nhập & Ghi Nhớ Thiết Bị</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js?v=20261003_multi_camera"></script>
 </body>
 
 </html>

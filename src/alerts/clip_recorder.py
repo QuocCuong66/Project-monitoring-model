@@ -17,6 +17,7 @@ from typing import Any, Optional, Union
 import cv2
 import numpy as np
 
+from src.alerts.event_logger import safe_file_tag
 from src.utils.config import get_project_root, load_config
 from src.utils.privacy import anonymize_people
 
@@ -114,7 +115,7 @@ class EventClipRecorder:
             self._last_maintenance = timestamp
             self.purge_expired()
 
-    def start_clip(self, person_id: int, timestamp: float) -> Optional[str]:
+    def start_clip(self, person_id: int, timestamp: float, camera_id: Optional[str] = None) -> Optional[str]:
         """Begin a clip for an alert at `timestamp`. Returns its path relative to the project root.
 
         The file appears once post_seconds of footage have been collected.
@@ -123,7 +124,8 @@ class EventClipRecorder:
             return None
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         ext = self.codecs[0][1] if self.codecs else ".webm"
-        path = self.clips_dir / f"clip_{stamp}_trk{person_id}{ext}"
+        cam_tag = f"_{safe_file_tag(camera_id)}" if camera_id else ""
+        path = self.clips_dir / f"clip_{stamp}{cam_tag}_trk{person_id}{ext}"
         with self._lock:
             self._recordings.append(_Recording(path=path, end_time=timestamp + self.post_seconds, frames=list(self._preroll)))
         try:
