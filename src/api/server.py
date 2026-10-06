@@ -23,6 +23,9 @@ from src.camera.webcam import WebcamStream
 from src.camera.rtsp import RTSPStream, build_stream_url, mask_url, probe_stream, validate_stream_url
 from src.camera.video_file import VideoFileStream
 from src.camera.camera_settings import load_camera_config, save_user_camera_settings
+from src.camera.devices import build_webcam_choices, list_webcam_devices
+from src.camera.diagnostics import diagnose_stream_failure
+from src.camera.discovery import discover_cameras
 from src.pipeline.multi_camera import CameraConfigError, MultiCameraMonitor, default_stream_factory
 from src.alerts.clip_recorder import find_clip_file
 from src.alerts.event_logger import EventLogger, AlertEvent
@@ -30,6 +33,8 @@ from src.alerts.telegram import TelegramSettings
 from src.api import telegram_routes
 from src.auth.middleware import AuthMiddleware
 from src.auth import routes as auth_routes
+from src.update import routes as update_routes
+from src.version import __version__
 from src.utils.config import get_project_root, load_config
 from src.utils.profiler import ResourceMonitor
 
@@ -59,7 +64,7 @@ limiter = Limiter(key_func=get_remote_address, enabled=_rate_enabled)
 app = FastAPI(
     title="Fall and Stroke Warning System API",
     description="Real-time Computer Vision & Temporal Behavioral Anomaly Detection API",
-    version="1.0.0",
+    version=__version__,
 )
 
 # Rate limiting error handler
@@ -116,12 +121,14 @@ def _apply_telegram_settings_to_pipeline(settings: TelegramSettings) -> None:
 
 app.include_router(telegram_routes.router)
 telegram_routes.add_settings_listener(_apply_telegram_settings_to_pipeline)
+app.include_router(update_routes.router)
 
 
 @app.on_event("startup")
 async def _capture_running_event_loop() -> None:
     global server_event_loop
     server_event_loop = asyncio.get_running_loop()
+    update_routes.check_in_background()
 
 current_camera_info: Dict[str, Any] = {
     "source_type": "webcam",
@@ -192,49 +199,16 @@ def _connection_status() -> Optional[Dict[str, Any]]:
     return None
 
 
-def probe_available_webcams(max_probe: int = 4) -> List[Dict[str, Any]]:
-    """Probe and return list of available webcam devices on the system."""
-    devices: List[Dict[str, Any]] = []
-    active_idx = None
-    with state_lock:
-        if current_camera_info.get("source_type") == "webcam":
-            active_idx = current_camera_info.get("device_index", 0)
+def probe_available_webcams() -> List[Dict[str, Any]]:
+    """Webcams on the host, listed by name WITHOUT opening any of them.
 
-    for idx in range(max_probe):
-        if idx == active_idx and camera_stream is not None and camera_stream.is_opened():
-            w = int(camera_stream.get_width()) if hasattr(camera_stream, "get_width") else 1280
-            h = int(camera_stream.get_height()) if hasattr(camera_stream, "get_height") else 720
-            devices.append({
-                "device_index": idx,
-                "name": f"Webcam {idx} ({w}x{h} - Đang kết nối)",
-                "resolution": f"{w}x{h}",
-                "is_active": True,
-            })
-            continue
-
-        try:
-            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-            if cap.isOpened():
-                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                cap.release()
-                devices.append({
-                    "device_index": idx,
-                    "name": f"Webcam {idx} ({w}x{h})" if w > 0 else f"Webcam {idx}",
-                    "resolution": f"{w}x{h}" if w > 0 else "1280x720",
-                    "is_active": False,
-                })
-        except Exception:
-            pass
-
-    if not devices:
-        devices.append({
-            "device_index": 0,
-            "name": "Webcam 0 (Thiết bị mặc định)",
-            "resolution": "1280x720",
-            "is_active": (active_idx == 0),
-        })
-    return devices
+    Opening each index to test it wakes a phone linked to Windows as a camera (Phone Link),
+    so only the camera the user selects is ever opened.
+    """
+    active_idx = _primary_webcam_index()
+    monitor = multi_camera_monitor
+    extra = set(monitor.webcam_indices_in_use()) if monitor is not None else set()
+    return build_webcam_choices(list_webcam_devices(), active_idx, extra)
 
 
 def save_camera_config_to_yaml(cfg_dict: Dict[str, Any]) -> bool:
@@ -301,10 +275,18 @@ def toggle_autostart(enable: bool = True) -> Dict[str, Any]:
 
 @app.post("/api/settings/check-camera")
 def check_camera_status() -> Dict[str, Any]:
-    """Test camera access and return list of working cameras."""
+    """Test access to the selected webcam only (never other indices, e.g. a linked phone)."""
+    idx = _primary_webcam_index()
+    with state_lock:
+        streaming = is_running and camera_stream is not None and camera_stream.is_opened()
+    if idx is not None and streaming:
+        # Already capturing: opening it a second time would fail or steal the device
+        return {"status": True, "message": f"Camera {idx} đang hoạt động bình thường.", "working_devices": [idx]}
+    if idx is None:
+        idx = int(load_camera_config().get("webcam", {}).get("device_index", 0))
     try:
         from src.camera.camera_permission import test_camera_access
-        ok, msg, cams = test_camera_access(0)
+        ok, msg, cams = test_camera_access(idx)
         return {"status": ok, "message": msg, "working_devices": cams}
     except Exception as e:
         return {"status": False, "message": f"Lỗi kiểm tra camera: {e}", "working_devices": []}
@@ -433,10 +415,8 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
             if not success:
                 new_stream.release()
                 if req.source_type == "rtsp":
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Không thể kết nối đến camera tại '{mask_url(req.rtsp_url)}'. Vui lòng kiểm tra địa chỉ IP/tên miền, cổng (port forwarding/VPN) hoặc tài khoản đăng nhập."
-                    )
+                    diag = diagnose_stream_failure(req.rtsp_url)
+                    raise HTTPException(status_code=400, detail=f"{diag['message']} {diag['hint']}".strip())
                 else:
                     # Fallback to synthetic if hardware webcam fails
                     from src.camera.synthetic import SyntheticCameraStream
@@ -512,8 +492,16 @@ def test_camera_connection(req: CameraTestRequest) -> Dict[str, Any]:
     """Try a network / remote camera URL (one frame) without switching the active camera."""
     url = _resolve_stream_url(req.rtsp_url, req.rtsp_username, req.rtsp_password)
     result = probe_stream(url)
+    if not result.get("ok"):
+        result.update(diagnose_stream_failure(url))  # specific reason instead of FFmpeg's "could not open"
     result["url"] = mask_url(url)
     return result
+
+
+@app.get("/camera/discover")
+def discover_network_cameras() -> Dict[str, Any]:
+    """Scan the LAN this computer is on for IP cameras ("Dò camera trong mạng")."""
+    return discover_cameras()
 
 
 @app.post("/camera/save-config")
@@ -641,35 +629,6 @@ def set_autostart(enable: bool = True) -> Dict[str, Any]:
             except Exception as e:
                 return {"enabled": True, "message": f"Không thể xóa phím tắt: {e}"}
         return {"enabled": False, "message": "Đã tắt tự động chạy ngầm cùng Windows!"}
-
-
-@app.post("/api/settings/check-camera")
-def check_camera_status() -> Dict[str, Any]:
-    """Diagnostics probe to check camera accessibility and permissions."""
-    working: List[int] = []
-    for idx in range(3):
-        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-        if cap.isOpened():
-            working.append(idx)
-            cap.release()
-
-    with state_lock:
-        if camera_stream and camera_stream.is_opened():
-            if 0 not in working:
-                working.insert(0, 0)
-
-    if working:
-        return {
-            "status": True,
-            "message": f"Camera hoạt động tốt! Đã tìm thấy {len(working)} thiết bị khả dụng.",
-            "working_devices": working,
-        }
-    else:
-        return {
-            "status": False,
-            "message": "Không thể mở camera. Vui lòng kiểm tra quyền Camera Windows hoặc thiết bị khác đang chiếm dụng.",
-            "working_devices": [],
-        }
 
 
 @app.post("/api/settings/open-camera-settings")

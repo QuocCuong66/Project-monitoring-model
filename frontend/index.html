@@ -100,7 +100,7 @@
             <span class="status-dot-pulse"></span>
             <span>Hệ thống hoạt động</span>
           </div>
-          <span class="version-tag">Phiên bản 0.3.0</span>
+          <span class="version-tag" id="sidebar-version-tag">Phiên bản 0.3.2</span>
         </div>
       </aside>
 
@@ -203,6 +203,8 @@
                         <input type="text" id="rtsp-url-input" class="cam-input" placeholder="rtsp://192.168.1.100:554/stream1 hoặc rtsp://tenmien.ddns.net:554/stream1" spellcheck="false">
                         <button type="button" class="btn-cam-action" id="btn-test-rtsp">Kiểm tra</button>
                       </div>
+                      <button type="button" class="btn-cam-action btn-cam-discover" id="btn-discover-cameras">📡 Dò camera trong mạng</button>
+                      <div class="cam-discover-results" id="cam-discover-results" style="display: none;"></div>
                       <div class="cam-input-action-row">
                         <input type="text" id="rtsp-username-input" class="cam-input" placeholder="Tài khoản (tùy chọn)" autocomplete="off" spellcheck="false">
                         <input type="password" id="rtsp-password-input" class="cam-input" placeholder="Mật khẩu (tùy chọn)" autocomplete="new-password">
@@ -230,19 +232,13 @@
 
             <!-- Vùng hiển thị Video Feed -->
             <div class="video-container" id="video-container">
-              <img id="live-video-stream" src="" alt="Live AI Camera Stream"
-                onerror="this.onerror=null; this.src=''; window.handleStreamError();">
+              <img id="live-video-stream" alt="Live AI Camera Stream">
               
               <!-- Overlay Timestamp góc trên bên trái -->
-              <div class="video-overlay-ts" id="video-overlay-ts">2026-10-01 15:42:08</div>
+              <div class="video-overlay-ts" id="video-overlay-ts"></div>
 
               <!-- Overlay Camera Tag góc trên bên phải -->
               <div class="video-overlay-camtag" id="video-overlay-camtag">Camera 01</div>
-
-              <!-- Bounding Box mô phỏng nhận diện ngã (hiện khi có sự cố) -->
-              <div class="video-fall-box-demo" id="video-fall-box-demo">
-                <div class="fall-box-tag">FALL DETECTED 96%</div>
-              </div>
 
               <!-- Floating Fall Badge -->
               <div class="video-fall-badge" id="video-fall-badge" style="display: none;">
@@ -254,27 +250,15 @@
               <div class="stream-offline-overlay" id="stream-offline-overlay">
                 <div class="offline-box">
                   <div class="offline-icon">📹</div>
-                  <h3>LUỒNG VIDEO ĐANG TẠM DỪNG</h3>
-                  <p>Khởi chạy hệ thống bằng nút bên dưới hoặc chuyển sang camera khác.</p>
-                  <button class="btn-primary" id="btn-start-camera-overlay">BẬT CAMERA STREAM</button>
+                  <h3 id="offline-title">ĐANG CHỜ TÍN HIỆU CAMERA</h3>
+                  <p id="offline-desc">Hình ảnh sẽ tự hiện khi kết nối được camera. Đổi nguồn camera trong menu ⋯ ở góc trên.</p>
                 </div>
               </div>
             </div>
 
             <!-- Thanh điều khiển Video Player phía dưới (Video Controls Bar) -->
             <div class="video-controls-bar">
-              <div class="controls-left">
-                <button type="button" class="btn-player-icon" id="btn-camera-toggle" title="Tạm dừng / Tiếp tục phát stream">
-                  <span id="player-toggle-icon">⏸</span>
-                </button>
-                <button type="button" class="btn-player-icon" id="btn-sound-toggle" title="Bật / Tắt âm thanh cảnh báo">
-                  <span id="sound-icon-indicator">🔊</span>
-                </button>
-                <span class="badge-quality-hd">HD</span>
-                <button type="button" class="btn-player-icon" id="btn-quick-snapshot" title="Chụp ảnh nhanh màn hình">
-                  📷
-                </button>
-              </div>
+              <div class="controls-left"></div>
               <div class="controls-right">
                 <button type="button" class="btn-player-icon" id="btn-quick-fullscreen" title="Phóng to toàn màn hình">
                   ⛶
@@ -436,8 +420,10 @@
                 </div>
               </div>
               <div class="cam-full-row" id="extra-cam-webcam-row" style="display: none;">
-                <label for="extra-cam-device" class="cam-field-label">Số thứ tự webcam:</label>
-                <input type="number" id="extra-cam-device" class="cam-input" min="0" max="9" value="1">
+                <label for="extra-cam-device" class="cam-field-label">Chọn webcam:</label>
+                <select id="extra-cam-device" class="cam-select">
+                  <option value="1">Webcam 1</option>
+                </select>
               </div>
               <div class="cam-field-hint">Mỗi camera có bộ theo dõi và cảnh báo riêng; các camera dùng chung một GPU nên FPS phân tích của từng camera giảm khi thêm camera.</div>
               <div class="cam-buttons-row">
@@ -447,6 +433,7 @@
               <div class="cam-toast-feedback" id="extra-cam-feedback" style="display: none;"></div>
             </form>
 
+            <div class="cam-list" id="cam-list" aria-label="Danh sách camera"></div>
             <div class="extra-cam-grid" id="extra-cam-grid"></div>
             <div class="extra-cam-empty" id="extra-cam-empty">Chưa có camera thêm. Bấm “+ Thêm camera” để giám sát thêm phòng khác cùng lúc.</div>
           </div>
@@ -674,6 +661,38 @@
           <div class="settings-feedback" id="telegram-feedback" style="display: none;"></div>
         </div>
 
+        <!-- Mục: Cập nhật phiên bản -->
+        <div class="settings-group" id="update-settings-group">
+          <div class="settings-group-header">
+            <div class="settings-group-info">
+              <div class="settings-item-title">
+                <span>🔄 Cập nhật phiên bản</span>
+                <span class="badge-status-pill pill-off" id="update-status-pill">v…</span>
+              </div>
+              <p class="settings-item-desc">
+                Kiểm tra bản mới trên GitHub, tải về và cài đặt. Hệ thống sẽ tự tắt khoảng 1 phút để cài rồi tự mở lại;
+                cài đặt, tài khoản và lịch sử cảnh báo được giữ nguyên.
+              </p>
+            </div>
+          </div>
+          <div class="settings-actions-row">
+            <button class="btn-modal-action" id="btn-update-check">
+              <span>🔍</span> Kiểm tra bản mới
+            </button>
+            <button class="btn-modal-action" id="btn-update-download" style="display: none;">
+              <span>⬇️</span> Tải bản mới
+            </button>
+            <button class="btn-modal-action" id="btn-update-install" style="display: none;">
+              <span>🚀</span> Cài đặt &amp; khởi động lại
+            </button>
+          </div>
+          <div class="update-progress" id="update-progress" style="display: none;">
+            <div class="update-progress-bar" id="update-progress-bar"></div>
+          </div>
+          <div class="update-notes" id="update-notes" style="display: none;"></div>
+          <div class="settings-feedback" id="update-feedback" style="display: none;"></div>
+        </div>
+
         <!-- Mục 5: Điều khiển & Tắt hệ thống -->
         <div class="settings-group group-danger">
           <div class="settings-group-header">
@@ -693,7 +712,7 @@
 
         <!-- Thông tin hệ thống -->
         <div class="settings-info-box">
-          <div class="info-item"><span>Phiên bản:</span> <strong>Fall & Stroke Warning System v0.3.0</strong></div>
+          <div class="info-item"><span>Phiên bản:</span> <strong>Fall & Stroke Warning System <span id="app-version-text">v0.3.2</span></strong></div>
           <div class="info-item"><span>Địa chỉ Web:</span> <strong>http://localhost:8000</strong></div>
         </div>
       </div>

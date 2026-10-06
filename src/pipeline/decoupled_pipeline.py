@@ -29,7 +29,7 @@ from src.temporal.gated_trigger import KinematicGatedTrigger
 from src.action.action_classifier import ActionClassifier, ActionPrediction
 from src.action.behavior_classifier import BehaviorSequenceAnalyzer
 from src.anomaly.anomaly_score import ReconstructionAnomalyScorer, AnomalyResult
-from src.risk.risk_engine import RiskEngine, RiskAssessment
+from src.risk.risk_engine import RiskEngine, display_action as _display_action, RiskAssessment
 from src.risk.threshold_manager import ThresholdManager
 from src.alerts.alert_manager import AlertManager, AlertEvent
 from src.detection.motion_gater import MotionGater, MotionGateResult
@@ -328,6 +328,8 @@ class DecoupledPipeline:
             inference_lock=self.inference_lock,
         )
         session.blur_faces = self.blur_faces
+        if session.risk_engine.lying_analyzer is not None:
+            session.risk_engine.lying_analyzer.camera_id = camera_id  # per-camera bed / sofa zones
         return session
 
     def start(self) -> None:
@@ -560,6 +562,8 @@ class DecoupledPipeline:
                     anomaly_res=anomaly_res,
                     kinematics=kinematics,
                     timestamp=packet.timestamp,
+                    snapshot=snapshots_hist[-1],
+                    frame_size=(packet.frame.shape[1], packet.frame.shape[0]),
                 )
                 assessments.append(assessment)
 
@@ -574,13 +578,11 @@ class DecoupledPipeline:
                                 for t in active_tracks],
                         alerted_bbox=track.bbox,
                     )
-                alert = self.alert_manager.process_assessment(
+                alerts_raised.extend(self.alert_manager.process(
                     assessment=assessment,
                     frame=snapshot,
                     timestamp=packet.timestamp,
-                )
-                if alert is not None:
-                    alerts_raised.append(alert)
+                ))
 
         if temporal_tick:
             self._last_assessments = {a.track_id: a for a in assessments}
@@ -619,7 +621,7 @@ class DecoupledPipeline:
             ass = risk_dict.get(tid)
 
             state = ass.state if ass else "NORMAL"
-            action = ass.evidence.get("primary_action", "detected") if ass else "detected"
+            action = _display_action(ass.evidence) if ass else "detected"
             risk_score = ass.risk_score if ass else 0.05
             evidence = ass.evidence if ass else None
 

@@ -45,11 +45,33 @@ class ThresholdManager:
         self.thresh_abnormal = float(sm.get("thresh_abnormal", 0.72))
         self.thresh_high_risk = float(sm.get("thresh_high_risk", 0.85))
 
+        # Multi-signal escalation: both the physical drop and the action model must reach this level
+        # before their average can override the weighted score (a single noisy signal cannot).
+        self.synergy_min_signal = float(sm.get("synergy_min_signal", 0.55))
+        # Immobility index a person on the floor must reach before the "lying still" escalation applies
+        self.immobility_synergy_min = float(sm.get("immobility_synergy_min", 0.60))
+
         # Temporal debounce durations (in seconds)
         self.min_duration_suspicious = float(sm.get("min_duration_suspicious", 0.5))
         self.min_duration_abnormal = float(sm.get("min_duration_abnormal", 1.5))
         self.min_duration_high_risk = float(sm.get("min_duration_high_risk", 2.5))
         self.min_recovery_duration = float(sm.get("min_recovery_duration", 3.0))
+
+        # Monitoring scope: anyone not lying (standing, walking, sitting) is monitored; anyone lying without
+        # a fall / collapse / convulsion (already lying when first seen, lay down deliberately) is shown as safe
+        scope = cfg.get("monitoring_scope", {}) or {}
+        self.safe_when_lying = bool(scope.get("safe_when_lying", False))
+        self.fall_onset_reasons: tuple[str, ...] = tuple(
+            str(r) for r in scope.get("fall_onset_reasons", (
+                "fast_drop", "upright_to_floor", "unsteady_before", "collapse_from_sitting", "convulsion"))
+        )
+
+        # Lying context (sleep / phone / turning over vs warning signs); parsed by LyingContextConfig
+        self.lying_context: Dict[str, Any] = dict(cfg.get("lying_context", {}) or {})
+        # Convulsion (rhythmic jerking) detector; parsed by ConvulsionConfig
+        self.convulsion: Dict[str, Any] = dict(cfg.get("convulsion", {}) or {})
+        # Stroke / acute-illness warning-sign stream; parsed by StrokeSignConfig
+        self.stroke_signs: Dict[str, Any] = dict(cfg.get("stroke_signs", {}) or {})
 
         # Alerts & Cooldown
         al = cfg.get("alerts", {})

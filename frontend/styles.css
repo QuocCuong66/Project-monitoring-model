@@ -570,6 +570,7 @@ b, strong, th,
   font-family: 'JetBrains Mono', monospace;
   font-size: 13.5px;
   font-weight: 300;
+  font-variant-numeric: tabular-nums; /* digits keep their width as the clock ticks */
   padding: 4px 10px;
   border-radius: var(--radius-xs);
   pointer-events: none;
@@ -587,39 +588,6 @@ b, strong, th,
   padding: 4px 10px;
   border-radius: var(--radius-xs);
   pointer-events: none;
-}
-
-/* Bounding Box Fall Demo */
-.video-fall-box-demo {
-  position: absolute;
-  top: 36%;
-  left: 30%;
-  width: 200px;
-  height: 210px;
-  border: 2px solid #ef4444;
-  border-radius: 8px;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.6), inset 0 0 10px rgba(239, 68, 68, 0.2);
-  pointer-events: none;
-  animation: boxPulse 1.6s infinite alternate;
-}
-
-@keyframes boxPulse {
-  0% { border-color: #ef4444; }
-  100% { border-color: #ff3333; box-shadow: 0 0 24px rgba(255, 51, 51, 0.9); }
-}
-
-.fall-box-tag {
-  position: absolute;
-  top: 0;
-  left: 0;
-  background: #ef4444;
-  color: #ffffff;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 300;
-  padding: 3px 8px;
-  border-radius: 6px 0 6px 0;
-  letter-spacing: 0.5px;
 }
 
 .video-fall-badge {
@@ -715,16 +683,6 @@ b, strong, th,
   color: var(--accent-blue);
   background: #f1f5f9;
   transform: scale(1.12);
-}
-
-.badge-quality-hd {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 300;
-  color: var(--text-muted);
-  border: 1px solid var(--border-subtle);
-  padding: 2px 7px;
-  border-radius: 4px;
 }
 
 /* 2. Card AI Phát Hiện Té Ngã (Khối tính năng an toàn dưới camera) */
@@ -1618,6 +1576,33 @@ input:checked + .slider:before {
 }
 
 /* Telegram notification settings */
+.update-progress {
+  margin-top: 10px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  overflow: hidden;
+}
+
+.update-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: #2563eb;
+  transition: width 0.3s ease;
+}
+
+.update-notes {
+  margin-top: 10px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.12);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .settings-feedback {
   margin-top: 10px;
   padding: 8px 12px;
@@ -2046,3 +2031,125 @@ input:checked + .slider:before {
   transform: scale(0.99);
 }
 
+
+/* "Dò camera trong mạng": LAN camera discovery results */
+.btn-cam-discover {
+  align-self: flex-start;
+  padding: 6px 12px;
+}
+
+.cam-discover-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.cam-discover-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cam-discover-item:hover {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-subtle);
+}
+
+.cam-discover-item .cam-discover-head {
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.cam-discover-item .cam-discover-status {
+  font-size: 11.5px;
+  color: var(--status-green);
+}
+
+.cam-discover-item.rtsp-off .cam-discover-status {
+  color: var(--status-amber);
+}
+
+.cam-discover-empty {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* Camera list (main + added cameras) with view / delete */
+.cam-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.cam-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-card);
+}
+
+.cam-list-row .dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-light);
+}
+
+.cam-list-row .dot.on { background: var(--status-green); }
+
+.cam-list-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.cam-list-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.cam-list-tag {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--accent-blue);
+  background: var(--accent-blue-subtle);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  margin-left: 4px;
+}
+
+.cam-list-source {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cam-list-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cam-list-actions .btn-cam-action {
+  padding: 4px 12px;
+}

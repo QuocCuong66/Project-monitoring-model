@@ -8,6 +8,9 @@ webcam:
   height: 720
   fps: 30
   api_preference: "dshow" # "dshow" on windows, "v4l2" on linux, or "default"
+  warmup_seconds: 2.0              # chỉ nhận webcam khi đọc được hình trong 2 giây (mở được mà không có hình = đang bị chiếm)
+  reopen_after_seconds: 2.0        # không có hình mới sau 2 giây (Zalo / Teams / Camera / Phone Link giành webcam): đóng và mở lại
+  max_reconnect_delay_seconds: 10.0  # thử lại sau 0.5 -> 1 -> 2 -> ... tối đa 10 giây
 
 # Camera IP / camera ở xa: rtsp://, rtsps://, rtmp://, http(s):// (MJPEG, HLS .m3u8)
 # Truy cập từ xa qua tên miền DDNS + mở cổng (port forwarding) hoặc tốt hơn là qua VPN (Tailscale/ZeroTier).
@@ -20,6 +23,17 @@ rtsp:
   max_reconnect_delay_seconds: 30.0 # ...tăng dần (x2) tới tối đa 30s giữa các lần thử
   max_reconnect_attempts: 0         # 0 = thử lại mãi mãi (giám sát 24/7 phải tự phục hồi)
   buffer_size: 1 # minimal internal buffer to avoid lag
+
+# Nút "Dò camera trong mạng" + chẩn đoán lỗi khi bấm "Kiểm tra" (chỉ quét mạng LAN của chính người dùng)
+discovery:
+  rtsp_ports: [554, 8554]                   # Cổng RTSP: mở = camera sẵn sàng cho hệ thống
+  vendor_ports: [8000, 9010, 37777, 34567]  # Cổng riêng của hãng (EZVIZ/Hikvision, Dahua, XMEye): có camera nhưng chưa bật RTSP
+  http_ports: [8080]                        # Điện thoại làm camera (IP Webcam / MJPEG)
+  connect_timeout_ms: 1000                  # Mỗi lần thử 1 cổng trên 1 máy (camera Wi-Fi có thể trả lời chậm)
+  concurrency: 256                          # Số kết nối thử đồng thời khi quét
+  max_prefix_length: 24                     # Chỉ quét tối đa 1 dải /24 (254 địa chỉ) quanh IP của máy
+  rtsp_probe_timeout_ms: 3000               # Chờ camera trả lời yêu cầu RTSP (kiểm tra tài khoản / đường dẫn)
+  diagnose_timeout_ms: 3000                 # Khi "Kiểm tra" lỗi: chờ để phân biệt "cổng đóng" với "không có thiết bị" (Windows mất ~2s)
 
 video:
   path: "data/videos/sample_adl_fall.mp4"

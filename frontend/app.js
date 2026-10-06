@@ -139,7 +139,6 @@
 
   const elVideoStream = document.getElementById("live-video-stream");
   const elOfflineOverlay = document.getElementById("stream-offline-overlay");
-  const elBtnStartOverlay = document.getElementById("btn-start-camera-overlay");
 
   // Camera Management DOM Elements
   const elCameraTypeSelect = document.getElementById("camera-type-select");
@@ -154,6 +153,8 @@
   const elRtspUsernameInput = document.getElementById("rtsp-username-input");
   const elRtspPasswordInput = document.getElementById("rtsp-password-input");
   const elBtnTestRtsp = document.getElementById("btn-test-rtsp");
+  const elBtnDiscoverCameras = document.getElementById("btn-discover-cameras");
+  const elCamDiscoverResults = document.getElementById("cam-discover-results");
 
   const elGroupVideoPreset = document.getElementById("group-video-preset");
   const elVideoPresetSelect = document.getElementById("video-preset-select");
@@ -410,9 +411,17 @@
   }
 
   // 2. Clock updater
+  const elVideoOverlayTs = document.getElementById("video-overlay-ts");
+  const pad2 = (n) => String(n).padStart(2, "0");
   function updateClock() {
     const now = new Date();
     elClock.textContent = now.toTimeString().split(" ")[0];
+    if (elVideoOverlayTs) {
+      // Local date-time on the live video, e.g. 2026-10-04 15:42:08
+      elVideoOverlayTs.textContent =
+        `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ` +
+        `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+    }
   }
   setInterval(updateClock, 1000);
   updateClock();
@@ -485,19 +494,25 @@
     const fromExtraCamera = Boolean(alert.camera_id);
     const cameraLabel = alert.camera_name || "Camera chính";
 
-    // Phân loại: Nguy cơ té ngã vs Hành vi bất thường
-    const isFallRisk = (
+    // Hai luồng riêng: "fall" (té ngã) và "stroke_warning" (dấu hiệu cảnh báo đột quỵ / bệnh cấp).
+    // Sự kiện cũ (chưa có event_type) vẫn phân loại theo nhãn hành động như trước.
+    const eventType = alert.event_type || "";
+    const isStrokeSigns = eventType === "stroke_warning";
+    const isFallRisk = eventType === "fall" || (!isStrokeSigns && (
       primaryAction === "falling" ||
       primaryAction === "stumbling" ||
       primaryAction === "lying" ||
       primaryAction === "immobile" ||
       riskScore >= 0.70 ||
       (alert.evidence?.drop_severity_score && alert.evidence.drop_severity_score > 0.35)
-    );
+    ));
+    const strokeSignsText = (alert.evidence?.stroke_signs || []).map((w) => LYING_CONTEXT_LABELS[w] || w).join(", ");
 
     // 1. Show flash emergency banner
     elEmergencyBar.style.display = "block";
-    const alertTypeLabel = isFallRisk ? "NGUY CƠ TÉ NGÃ KHẨN CẤP" : "HÀNH VI BẤT THƯỜNG";
+    const alertTypeLabel = isStrokeSigns
+      ? `DẤU HIỆU CẢNH BÁO ĐỘT QUỴ / BỆNH CẤP${strokeSignsText ? `: ${strokeSignsText}` : ""}`
+      : (isFallRisk ? "NGUY CƠ TÉ NGÃ KHẨN CẤP" : "HÀNH VI BẤT THƯỜNG");
     elAlertBarDesc.textContent = `[${alertTypeLabel}] ${cameraLabel} — Đối tượng ID: #${personId} — ${primaryAction.toUpperCase()} (Điểm rủi ro: ${riskScore.toFixed(2)}). Possible medical emergency / abnormal behavior detected. Please check the person.`;
 
     // 2. Hiện khung viền màu đỏ chớp nháy cảnh báo & Floating badge trên video (hoặc trên ô camera thêm)
@@ -507,9 +522,11 @@
     if (!fromExtraCamera && elVideoFallBadge) {
       elVideoFallBadge.style.display = "flex";
       if (elVideoFallText) {
-        elVideoFallText.textContent = isFallRisk
-          ? `🚨 CẢNH BÁO: PHÁT HIỆN NGUY CƠ TÉ NGÃ! (ID #${personId})`
-          : `⚠️ CẢNH BÁO: PHÁT HIỆN HÀNH VI BẤT THƯỜNG! (ID #${personId})`;
+        elVideoFallText.textContent = isStrokeSigns
+          ? `⚠️ DẤU HIỆU CẢNH BÁO ĐỘT QUỴ / BỆNH CẤP — HÃY KIỂM TRA NGƯỜI NÀY! (ID #${personId})`
+          : isFallRisk
+            ? `🚨 CẢNH BÁO: PHÁT HIỆN NGUY CƠ TÉ NGÃ! (ID #${personId})`
+            : `⚠️ CẢNH BÁO: PHÁT HIỆN HÀNH VI BẤT THƯỜNG! (ID #${personId})`;
       }
     }
 
@@ -526,7 +543,6 @@
     const elIncTs = document.getElementById("incident-timestamp-txt");
     const elIncConf = document.getElementById("incident-confidence-txt");
     const elIncStatus = document.getElementById("incident-status-tag");
-    const elFallDemoBox = document.getElementById("video-fall-box-demo");
 
     if (elIncTs) elIncTs.textContent = `${new Date().toLocaleTimeString()} - ${new Date().toLocaleDateString('vi-VN')}`;
     if (elIncConf) elIncConf.textContent = `${(riskScore * 100).toFixed(0)}%`;
@@ -535,9 +551,6 @@
       elIncStatus.style.background = "#fef2f2";
       elIncStatus.style.borderColor = "#fecaca";
       elIncStatus.style.color = "#dc2626";
-    }
-    if (elFallDemoBox) {
-      elFallDemoBox.style.display = isFallRisk ? "block" : "none";
     }
 
     // 5. Thêm dòng vào Bảng Lịch Sử Cảnh Báo
@@ -548,7 +561,7 @@
       tr.innerHTML = `
         <td><span class="id-tag">#${String(alertCount + 1).padStart(3, '0')}</span></td>
         <td>${new Date().toLocaleTimeString()}</td>
-        <td><span class="badge-type-danger">${isFallRisk ? "Té ngã" : "Bất thường"}</span></td>
+        <td><span class="badge-type-danger">${isStrokeSigns ? "Dấu hiệu đột quỵ" : (isFallRisk ? "Té ngã" : "Bất thường")}</span></td>
         <td>${escapeHtml(cameraLabel)}</td>
         <td><span class="badge-state-pending">Đang xử lý</span></td>
       `;
@@ -626,12 +639,17 @@
     const timestamp = alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
     const action = alert.evidence?.primary_action || "Khẩn cấp";
     const score = typeof alert.risk_score === "number" ? alert.risk_score.toFixed(2) : "0.95";
+    const lyingLabel = LYING_CONTEXT_LABELS[alert.evidence?.lying_context] || "";
+    const warningSigns = [...new Set([...(alert.evidence?.warning_signs || []), ...(alert.evidence?.stroke_signs || [])])]
+      .map((w) => LYING_CONTEXT_LABELS[w] || w).join(", ");
+    const streamTitle = { fall: "TÉ NGÃ", stroke_warning: "DẤU HIỆU ĐỘT QUỴ / BỆNH CẤP" }[alert.event_type] || "";
+    const onsetLabel = ONSET_REASON_LABELS[alert.evidence?.lying_onset_reason] || "";
 
     card.innerHTML = `
       <div class="alert-item-header">
         <div class="alert-item-title">
           <span>🚨</span>
-          <span>${alert.camera_name ? `${escapeHtml(alert.camera_name)} · ` : ""}Đối tượng #${alert.person_id} — ${escapeHtml(action.toUpperCase())}</span>
+          <span>${streamTitle ? `[${streamTitle}] ` : ""}${alert.camera_name ? `${escapeHtml(alert.camera_name)} · ` : ""}Đối tượng #${alert.person_id} — ${escapeHtml(action.toUpperCase())}</span>
         </div>
         <div class="alert-item-header-actions">
           <span class="alert-item-time">${timestamp}</span>
@@ -653,6 +671,9 @@
         <span class="meta-field">Vận tốc Vy: <strong>${alert.evidence?.vertical_velocity ?? "N/A"}</strong></span>
         <span class="meta-field">Góc thân: <strong>${alert.evidence?.torso_angle_deg ? alert.evidence.torso_angle_deg + "°" : "N/A"}</strong></span>
         <span class="meta-field">Bất động: <strong>${alert.evidence?.immobility_index ?? "N/A"}</strong></span>
+        ${lyingLabel ? `<span class="meta-field">Ngữ cảnh: <strong>${escapeHtml(lyingLabel)}</strong></span>` : ""}
+        ${warningSigns ? `<span class="meta-field">Dấu hiệu cảnh báo: <strong>${escapeHtml(warningSigns)}</strong></span>` : ""}
+        ${onsetLabel ? `<span class="meta-field">Cách nằm xuống: <strong>${escapeHtml(onsetLabel)}</strong></span>` : ""}
       </div>
       ${alert.clip_path ? `
       <div class="alert-item-clip-row">
@@ -744,8 +765,8 @@
         }
         if (elOfflineOverlay) elOfflineOverlay.style.display = "none";
         
-        // Ensure stream URL is attached
-        if (!elVideoStream.src || elVideoStream.src.indexOf("/stream/mjpeg") === -1) {
+        // Camera connected: show its picture automatically
+        if (!elVideoStream.getAttribute("src") || elVideoStream.src.indexOf("/stream/mjpeg") === -1) {
           elVideoStream.src = buildMjpegUrl();
         }
       } else {
@@ -802,15 +823,53 @@
     }
   }
 
+  // Lying context from the risk engine (decision support only, never a diagnosis)
+  const LYING_CONTEXT_LABELS = {
+    lying: "Đang nằm",
+    resting: "Nằm nghỉ / ngủ",
+    using_phone: "Nằm dùng điện thoại",
+    repositioning: "Trở mình",
+    collapsed: "Đổ gục rồi nằm im",
+    struggling: "Cố ngồi dậy nhiều lần không được",
+    asymmetric_movement: "Chỉ cử động một bên người",
+    still_on_floor: "Nằm im lâu trên sàn",
+    staggering: "Đi loạng choạng, mất thăng bằng",
+    abnormal_gesture: "Ôm đầu / ôm ngực / nôn",
+    unsteady_before_fall: "Loạng choạng ngay trước khi ngã",
+    collapse_from_sitting: "Đổ gục từ tư thế ngồi",
+    convulsion: "Co giật (giật nhịp nhàng nhiều phần cơ thể)",
+    after_convulsion: "Nằm sau cơn co giật",
+  };
+
+  // Lý do hệ thống kết luận cách người đó nằm xuống
+  const ONSET_REASON_LABELS = {
+    sat_down_first: "Ngồi xuống trước rồi nằm (chủ động)",
+    paused_then_lowered: "Dừng lại rồi từ từ hạ người (chủ động)",
+    slow_transition: "Hạ người chậm (chủ động)",
+    awake_after_drop: "Nằm phịch xuống nhưng vẫn hoạt động bình thường",
+    convulsion: "Co giật rồi nằm ra (không phải chủ động nằm)",
+    unsteady_before: "Loạng choạng rồi ngã",
+    collapse_from_sitting: "Đổ gục từ tư thế ngồi",
+    fast_drop: "Rơi nhanh xuống",
+    upright_to_floor: "Từ tư thế đứng xuống sàn trong vài giây",
+    inherited: "Tiếp nối từ lần theo dõi trước",
+  };
+
   // 7. Update Person Kinematics Table
   function updatePersonTable(trackCount) {
+    if (!trackCount || trackCount === 0) {
+      updateRiskKpi(0.05, "BÌNH THƯỜNG");
+    }
+    // The person table was removed from index.html; without this guard the TypeError
+    // lands in pollStatus' catch and shows "API: Mất kết nối" over a running camera.
+    if (!elPersonTableBody) return;
+
     if (!trackCount || trackCount === 0) {
       elPersonTableBody.innerHTML = `
         <tr>
           <td colspan="7" class="text-center text-muted">Không phát hiện người trong phòng (Phòng trống)</td>
         </tr>
       `;
-      updateRiskKpi(0.05, "BÌNH THƯỜNG");
       return;
     }
 
@@ -846,16 +905,25 @@
 
   // 9. Interactive UI Events
   // Stream error handler
-  window.handleStreamError = () => {
-    if (isCameraRunning) {
-      // Auto-reattach with cache buster after brief network pause
-      setTimeout(() => {
-        elVideoStream.src = buildMjpegUrl();
-      }, 800);
-    } else {
-      elOfflineOverlay.style.display = "flex";
-    }
-  };
+  // The live <img> keeps retrying while the camera runs, so the picture comes back on its own
+  // after a network drop or when the page loaded before the camera was ready.
+  let streamRetryTimer = null;
+  if (elVideoStream) {
+    elVideoStream.addEventListener("error", () => {
+      if (!isCameraRunning || !elVideoStream.getAttribute("src")) {
+        if (elOfflineOverlay) elOfflineOverlay.style.display = "flex";
+        return;
+      }
+      if (streamRetryTimer) return;
+      streamRetryTimer = setTimeout(() => {
+        streamRetryTimer = null;
+        if (isCameraRunning) elVideoStream.src = buildMjpegUrl();
+      }, 2000);
+    });
+    elVideoStream.addEventListener("load", () => {
+      if (elOfflineOverlay) elOfflineOverlay.style.display = "none";
+    });
+  }
 
   // Toast feedback message helper
   let camToastTimer = null;
@@ -912,7 +980,9 @@
         if (res.ok && data.ok) {
           showCamFeedback(`${data.message} (kết nối mất ${data.connect_ms} ms)`, "success", 6000);
         } else {
-          showCamFeedback(data.message || data.detail || "Không kết nối được camera.", "error", 7000);
+          // The backend explains the failure (own IP, RTSP off, wrong verification code, wrong path...)
+          const msg = escapeHtml(data.message || data.detail || "Không kết nối được camera.");
+          showCamFeedback(data.hint ? `${msg}<br>👉 ${escapeHtml(data.hint)}` : msg, "error", 15000);
         }
       } catch (e) {
         showCamFeedback("Lỗi kết nối tới Backend API: " + e.message, "error", 5000);
@@ -923,7 +993,79 @@
     });
   }
 
-  // Fetch Available Webcam Devices on Machine
+  // Put a discovered camera's IP (and RTSP port) into the URL, keeping the user's path / credentials
+  function applyDiscoveredCamera(dev) {
+    if (!elRtspUrlInput) return;
+    if (elRtspPresetSelect && dev.preset && dev.preset !== "custom" && RTSP_TEMPLATES[dev.preset] !== undefined) {
+      elRtspPresetSelect.value = dev.preset;
+    }
+    let url;
+    if (!dev.rtsp_open && dev.http_port && dev.preset === "http_mjpeg") {
+      url = `http://${dev.ip}:${dev.http_port}/video`;
+    } else {
+      const base = elRtspUrlInput.value.trim() || RTSP_TEMPLATES[dev.preset] || `rtsp://${dev.ip}:${dev.rtsp_port}/`;
+      url = base.replace(/^(\w+:\/\/(?:[^@\/]*@)?)[^\/:?#]+(?::\d+)?/, `$1${dev.ip}:${dev.rtsp_port}`);
+    }
+    elRtspUrlInput.value = url;
+    elRtspUrlInput.focus();
+    if (dev.rtsp_open) {
+      showCamFeedback(`Đã điền IP ${escapeHtml(dev.ip)}. Kiểm tra tài khoản / mật khẩu (EZVIZ: mã xác minh) rồi bấm "Kiểm tra".`, "success", 8000);
+    } else {
+      showCamFeedback(`Đã điền IP ${escapeHtml(dev.ip)}. ${escapeHtml(dev.status)}`, "info", 12000);
+    }
+  }
+
+  async function discoverNetworkCameras() {
+    if (!elBtnDiscoverCameras || !elCamDiscoverResults) return;
+    elBtnDiscoverCameras.disabled = true;
+    elBtnDiscoverCameras.textContent = "⏳ Đang dò mạng (~5 giây)...";
+    elCamDiscoverResults.style.display = "none";
+    try {
+      const res = await apiFetch(`${API_BASE}/camera/discover`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || res.status);
+      elCamDiscoverResults.innerHTML = "";
+      const devices = Array.isArray(data.devices) ? data.devices : [];
+      if (devices.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "cam-discover-empty";
+        const nets = (data.networks || []).join(", ") || "không có mạng LAN";
+        empty.textContent = `Không tìm thấy camera trong mạng ${nets}. Kiểm tra camera đã bật và cùng Wi-Fi với máy tính này, rồi dò lại.`;
+        elCamDiscoverResults.appendChild(empty);
+      }
+      devices.forEach((dev) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "cam-discover-item" + (dev.rtsp_open ? "" : " rtsp-off");
+        item.innerHTML = `<span class="cam-discover-head">${escapeHtml(dev.ip)} · ${escapeHtml(dev.brand)}</span>`
+          + `<span class="cam-discover-status">${dev.rtsp_open ? "✅" : "⚠️"} ${escapeHtml(dev.status)}</span>`;
+        item.addEventListener("click", () => applyDiscoveredCamera(dev));
+        elCamDiscoverResults.appendChild(item);
+      });
+      elCamDiscoverResults.style.display = "flex";
+      if (devices.length > 0) {
+        showCamFeedback(`Tìm thấy ${devices.length} thiết bị. Bấm vào một thiết bị để điền IP.`, "info", 5000);
+      }
+    } catch (e) {
+      showCamFeedback("Không dò được mạng: " + escapeHtml(String(e.message || e)), "error", 6000);
+    } finally {
+      elBtnDiscoverCameras.disabled = false;
+      elBtnDiscoverCameras.textContent = "📡 Dò camera trong mạng";
+    }
+  }
+
+  if (elBtnDiscoverCameras) {
+    elBtnDiscoverCameras.addEventListener("click", discoverNetworkCameras);
+  }
+
+  function webcamOptionLabel(dev) {
+    let label = `${dev.device_index}: ${dev.name}`;
+    if (dev.is_virtual) label += " — điện thoại / camera ảo";
+    if (dev.is_active) label += " (đang dùng)";
+    return label;
+  }
+
+  // List webcams by name (the server does not open any of them)
   async function fetchCameraDevices() {
     if (!elWebcamDeviceSelect) return;
     try {
@@ -935,14 +1077,32 @@
       if (!res.ok) return;
       const devices = await res.json();
       if (Array.isArray(devices) && devices.length > 0) {
+        // Primary camera: every webcam except those already used by an extra camera
         elWebcamDeviceSelect.innerHTML = "";
         devices.forEach((dev) => {
+          if (dev.in_use_by_extra && !dev.is_active) return;
           const opt = document.createElement("option");
           opt.value = dev.device_index;
-          opt.textContent = `${dev.name} (${dev.resolution || "720p"})`;
+          opt.textContent = webcamOptionLabel(dev);
           if (dev.is_active) opt.selected = true;
           elWebcamDeviceSelect.appendChild(opt);
         });
+        // Extra camera: only webcams not used by the primary camera or another extra camera
+        if (elExtraCamDevice && elExtraCamDevice.tagName === "SELECT") {
+          elExtraCamDevice.innerHTML = "";
+          devices.filter((dev) => !dev.is_active && !dev.in_use_by_extra).forEach((dev) => {
+            const opt = document.createElement("option");
+            opt.value = dev.device_index;
+            opt.textContent = webcamOptionLabel(dev);
+            elExtraCamDevice.appendChild(opt);
+          });
+          if (!elExtraCamDevice.options.length) {
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "Không còn webcam trống";
+            elExtraCamDevice.appendChild(opt);
+          }
+        }
       }
     } catch (err) {
       console.warn("[Dashboard] Lỗi khi quét danh sách camera:", err);
@@ -1077,6 +1237,7 @@
         isCameraRunning = true;
         if (elOfflineOverlay) elOfflineOverlay.style.display = "none";
         showCamFeedback(data.message || "Đã chuyển đổi camera thành công!", "success", 4000);
+        fetchCameraDevices();
 
         // Update active badge & HUD
         const newName = data.camera_info?.name || "Camera";
@@ -1093,7 +1254,7 @@
 
       } else {
         const msg = data.detail || data.message || "Không thể kết nối đến camera được chọn.";
-        showCamFeedback(msg, "error", 6000);
+        showCamFeedback(escapeHtml(msg), "error", 12000);
         pollStatus();
       }
     } catch (e) {
@@ -1120,7 +1281,7 @@
       try {
         await apiFetch(`${API_BASE}/camera/stop`, { method: "POST" });
         isCameraRunning = false;
-        if (elVideoStream) elVideoStream.src = "";
+        if (elVideoStream) elVideoStream.removeAttribute("src");
         if (elOfflineOverlay) elOfflineOverlay.style.display = "flex";
         showCamFeedback("Đã tạm dừng luồng camera giám sát.", "info", 2500);
         pollStatus();
@@ -1133,7 +1294,6 @@
   }
 
   if (elBtnCameraToggle) elBtnCameraToggle.addEventListener("click", toggleCamera);
-  if (elBtnStartOverlay) elBtnStartOverlay.addEventListener("click", () => applyCameraSwitch(false));
 
   // Refresh stream
   if (elBtnRefreshStream) {
@@ -1391,7 +1551,139 @@
     if (elSettingsOverlay) elSettingsOverlay.style.display = "flex";
     fetchAutostartStatus();
     fetchTelegramSettings();
+    fetchUpdateStatus();
   }
+
+  // ---- Cập nhật phiên bản (GitHub Releases) ----
+  const elUpdatePill = document.getElementById("update-status-pill");
+  const elUpdateCheck = document.getElementById("btn-update-check");
+  const elUpdateDownload = document.getElementById("btn-update-download");
+  const elUpdateInstall = document.getElementById("btn-update-install");
+  const elUpdateProgress = document.getElementById("update-progress");
+  const elUpdateProgressBar = document.getElementById("update-progress-bar");
+  const elUpdateNotes = document.getElementById("update-notes");
+  const elUpdateFeedback = document.getElementById("update-feedback");
+  const elAppVersionText = document.getElementById("app-version-text");
+  let updatePollTimer = null;
+  let installArmedUntil = 0;
+
+  function showUpdateFeedback(text, kind) {
+    if (!elUpdateFeedback) return;
+    elUpdateFeedback.style.display = text ? "block" : "none";
+    elUpdateFeedback.className = `settings-feedback ${kind === "error" ? "feedback-error" : "feedback-success"}`;
+    elUpdateFeedback.textContent = text || "";
+  }
+
+  function formatMb(bytes) {
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  async function readApiError(res) {
+    try {
+      const data = await res.json();
+      return data.detail || `HTTP ${res.status}`;
+    } catch (_) {
+      return `HTTP ${res.status}`;
+    }
+  }
+
+  function renderUpdateStatus(st) {
+    if (!st) return;
+    const latest = st.latest;
+    if (elAppVersionText) elAppVersionText.textContent = `v${st.current_version}`;
+    const elSidebarVersion = document.getElementById("sidebar-version-tag");
+    if (elSidebarVersion) elSidebarVersion.textContent = `Phiên bản ${st.current_version}`;
+    if (elUpdatePill) {
+      elUpdatePill.textContent = st.update_available && latest ? `Có bản mới v${latest.version}` : `v${st.current_version}`;
+      elUpdatePill.className = `badge-status-pill ${st.update_available ? "pill-on" : "pill-off"}`;
+    }
+
+    const downloading = st.state === "downloading";
+    const ready = st.state === "ready";
+    if (elUpdateDownload) elUpdateDownload.style.display = st.update_available && !downloading && !ready && st.state !== "installing" ? "inline-flex" : "none";
+    if (elUpdateInstall) elUpdateInstall.style.display = ready && st.can_install ? "inline-flex" : "none";
+    if (elUpdateProgress) elUpdateProgress.style.display = downloading || ready ? "block" : "none";
+    if (elUpdateProgressBar) {
+      const pct = st.total_bytes > 0 ? Math.min(100, (st.downloaded_bytes / st.total_bytes) * 100) : (ready ? 100 : 0);
+      elUpdateProgressBar.style.width = `${pct.toFixed(0)}%`;
+    }
+    if (elUpdateNotes) {
+      const show = st.update_available && latest;
+      elUpdateNotes.style.display = show ? "block" : "none";
+      if (show) {
+        const date = latest.published_at ? new Date(latest.published_at).toLocaleDateString() : "";
+        elUpdateNotes.textContent = `Phiên bản ${latest.version}${date ? ` (phát hành ${date})` : ""}\n\n${latest.notes || "Không có ghi chú phát hành."}`;
+      }
+    }
+
+    if (st.state === "error" && st.error) {
+      showUpdateFeedback(`⚠ ${st.error}`, "error");
+    } else if (downloading) {
+      const total = st.total_bytes ? ` / ${formatMb(st.total_bytes)}` : "";
+      showUpdateFeedback(`Đang tải bộ cài: ${formatMb(st.downloaded_bytes)}${total}...`, "success");
+    } else if (ready) {
+      showUpdateFeedback(st.can_install
+        ? "✓ Đã tải xong và kiểm tra bộ cài. Bấm \"Cài đặt & khởi động lại\" khi sẵn sàng."
+        : "✓ Đã tải xong. Đang chạy từ mã nguồn nên không tự cài được: hãy cập nhật bằng git pull, hoặc cài bằng bộ cài trên GitHub.", "success");
+    } else if (st.state === "installing") {
+      showUpdateFeedback("Đang cài bản mới... Hệ thống sẽ tự mở lại sau khoảng 1 phút, sau đó tải lại trang này.", "success");
+    } else if (st.check_error) {
+      showUpdateFeedback(`⚠ ${st.check_error}`, "error");
+    } else if (st.checked_at && !st.update_available) {
+      showUpdateFeedback(`✓ Bạn đang dùng phiên bản mới nhất (v${st.current_version}).`, "success");
+    } else {
+      showUpdateFeedback("", "success");
+    }
+
+    if (downloading && !updatePollTimer) {
+      updatePollTimer = setInterval(fetchUpdateStatus, 1000);
+    } else if (!downloading && updatePollTimer) {
+      clearInterval(updatePollTimer);
+      updatePollTimer = null;
+    }
+  }
+
+  async function fetchUpdateStatus() {
+    try {
+      const res = await apiFetch(`${API_BASE}/api/update/status`);
+      if (res.ok) renderUpdateStatus(await res.json());
+    } catch (_) {}
+  }
+
+  async function postUpdate(action, busyText) {
+    showUpdateFeedback(busyText, "success");
+    try {
+      const res = await apiFetch(`${API_BASE}/api/update/${action}`, { method: "POST" });
+      if (!res.ok) {
+        showUpdateFeedback(`⚠ ${await readApiError(res)}`, "error");
+        return null;
+      }
+      const st = await res.json();
+      renderUpdateStatus(st);
+      return st;
+    } catch (e) {
+      showUpdateFeedback(`⚠ Không kết nối được máy chủ: ${e.message}`, "error");
+      return null;
+    }
+  }
+
+  if (elUpdateCheck) elUpdateCheck.addEventListener("click", () => postUpdate("check", "Đang kiểm tra bản mới trên GitHub..."));
+  if (elUpdateDownload) elUpdateDownload.addEventListener("click", () => postUpdate("download", "Bắt đầu tải bộ cài..."));
+  if (elUpdateInstall) {
+    elUpdateInstall.addEventListener("click", async () => {
+      // Xác nhận ngay trên trang (bấm lần 2 trong 5 giây), không dùng hộp thoại của trình duyệt
+      if (Date.now() > installArmedUntil) {
+        installArmedUntil = Date.now() + 5000;
+        showUpdateFeedback("Hệ thống sẽ TẠM DỪNG GIÁM SÁT khoảng 1 phút để cài đặt. Bấm \"Cài đặt & khởi động lại\" thêm lần nữa để xác nhận.", "error");
+        return;
+      }
+      installArmedUntil = 0;
+      const st = await postUpdate("install", "Đang khởi chạy bộ cài...");
+      if (st) setTimeout(() => location.reload(), 90000);
+    });
+  }
+
+  fetchUpdateStatus();
 
   function closeSettingsModal() {
     if (elSettingsOverlay) elSettingsOverlay.style.display = "none";
@@ -1642,14 +1934,6 @@
   }
 
   // 6. Kết nối các tương tác trên giao diện Compact mới
-  const btnQuickSnap = document.getElementById("btn-quick-snapshot");
-  if (btnQuickSnap) {
-    btnQuickSnap.addEventListener("click", () => {
-      const elBtnSnap = document.getElementById("btn-snapshot");
-      if (elBtnSnap) elBtnSnap.click();
-    });
-  }
-
   const btnQuickFull = document.getElementById("btn-quick-fullscreen");
   if (btnQuickFull) {
     btnQuickFull.addEventListener("click", () => {
@@ -1703,6 +1987,7 @@
   // CAMERA KHÁC (ĐA CAMERA): mỗi camera thêm có AI, theo dõi và cảnh báo riêng
   // ============================================================================
   const elExtraCamGrid = document.getElementById("extra-cam-grid");
+  const elCamList = document.getElementById("cam-list");
   const elExtraCamEmpty = document.getElementById("extra-cam-empty");
   const elExtraCamCount = document.getElementById("extra-cam-count");
   const elExtraCamForm = document.getElementById("extra-cam-form");
@@ -1800,6 +2085,68 @@
     entry.meta.innerHTML = `<span class="dot ${dotClass}"></span>${escapeHtml(label)}`;
   }
 
+  function describeCameraSource(cam) {
+    if (cam.source_type === "webcam") return `Webcam ${cam.device_index ?? 0}`;
+    if (cam.source_type === "video") return "Tệp video";
+    if (cam.source_type === "synthetic") return "Giả lập";
+    return cam.rtsp_url || "Camera IP";
+  }
+
+  function viewExtraCamera(camId) {
+    const entry = extraCamTiles.get(camId);
+    if (!entry) return;
+    const box = entry.tile.querySelector(".extra-cam-video");
+    entry.tile.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (box && box.requestFullscreen) box.requestFullscreen().catch(() => {});
+  }
+
+  // One row per camera: the main camera (changed in the ⋯ menu) and every added camera (view / delete)
+  function renderCameraList(primary, cameras) {
+    if (!elCamList) return;
+    const rows = [];
+    if (primary) {
+      rows.push({ id: "main", name: primary.name || "Camera chính", source: describeCameraSource(primary),
+                  online: primary.online, main: true });
+    }
+    cameras.forEach(cam => rows.push({ id: cam.id, name: cam.name, source: describeCameraSource(cam),
+                                       online: cam.online, enabled: cam.enabled }));
+    elCamList.innerHTML = "";
+    rows.forEach(row => {
+      const item = document.createElement("div");
+      item.className = "cam-list-row";
+      const status = row.online ? "Đang hoạt động" : (row.enabled === false ? "Đang tắt" : "Ngoại tuyến");
+      item.innerHTML = `
+        <span class="dot ${row.online ? "on" : ""}"></span>
+        <div class="cam-list-info">
+          <span class="cam-list-name">${escapeHtml(row.name)}${row.main ? ' <span class="cam-list-tag">Chính</span>' : ""}</span>
+          <span class="cam-list-source" title="${escapeHtml(row.source)}">${escapeHtml(row.source)} · ${status}</span>
+        </div>
+        <div class="cam-list-actions"></div>`;
+      const actions = item.querySelector(".cam-list-actions");
+      const viewBtn = document.createElement("button");
+      viewBtn.type = "button";
+      viewBtn.className = "btn-cam-action";
+      viewBtn.textContent = "Xem";
+      viewBtn.addEventListener("click", () => {
+        if (row.main) {
+          document.getElementById("video-container")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          viewExtraCamera(row.id);
+        }
+      });
+      actions.appendChild(viewBtn);
+      if (!row.main) {
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn-extra-cam-remove";
+        delBtn.textContent = "🗑️ Xóa";
+        delBtn.addEventListener("click", () => removeExtraCamera(row.id, row.name));
+        actions.appendChild(delBtn);
+      }
+      elCamList.appendChild(item);
+    });
+  }
+
   async function fetchExtraCameras() {
     if (!elExtraCamGrid) return;
     try {
@@ -1818,6 +2165,8 @@
         const online = (data.primary && data.primary.online ? 1 : 0) + cameras.filter(c => c.online).length;
         elCamsOnline.textContent = online;
       }
+
+      renderCameraList(data.primary, cameras);
 
       const seen = new Set();
       cameras.forEach(cam => {
@@ -1850,6 +2199,7 @@
         const data = await res.json().catch(() => ({}));
         alert(data.detail || "Không xóa được camera.");
       }
+      fetchCameraDevices();
     } finally {
       fetchExtraCameras();
     }
@@ -1859,7 +2209,8 @@
     const sourceType = elExtraCamType ? elExtraCamType.value : "rtsp";
     const body = { name: elExtraCamName ? elExtraCamName.value.trim() : "", source_type: sourceType };
     if (sourceType === "webcam") {
-      body.device_index = parseInt(elExtraCamDevice ? elExtraCamDevice.value : "1", 10) || 0;
+      const idx = parseInt(elExtraCamDevice ? elExtraCamDevice.value : "", 10);
+      if (Number.isInteger(idx)) body.device_index = idx;
     } else {
       body.rtsp_url = elExtraCamUrl ? elExtraCamUrl.value.trim() : "";
       if (elExtraCamUser && elExtraCamUser.value.trim()) body.rtsp_username = elExtraCamUser.value.trim();
@@ -1875,8 +2226,9 @@
       elExtraCamForm.reset();
       handleExtraCamTypeChange();
       if (elExtraCamFeedback) elExtraCamFeedback.style.display = "none";
-    } else if (elExtraCamName) {
-      elExtraCamName.focus();
+    } else {
+      fetchCameraDevices();
+      if (elExtraCamName) elExtraCamName.focus();
     }
   }
 
@@ -1912,7 +2264,7 @@
         });
         const data = await res.json();
         if (res.ok && data.ok) showExtraCamFeedback(`${data.message} (kết nối mất ${data.connect_ms} ms)`, "success", 6000);
-        else showExtraCamFeedback(data.message || data.detail || "Không kết nối được camera.", "error", 7000);
+        else showExtraCamFeedback([data.message || data.detail || "Không kết nối được camera.", data.hint].filter(Boolean).join(" 👉 "), "error", 15000);
       } catch (e) {
         showExtraCamFeedback("Lỗi kết nối tới Backend API: " + e.message, "error");
       } finally {
@@ -1930,6 +2282,10 @@
         showExtraCamFeedback("Vui lòng nhập đường dẫn camera.", "error");
         return;
       }
+      if (body.source_type === "webcam" && body.device_index === undefined) {
+        showExtraCamFeedback("Không còn webcam trống để thêm.", "error");
+        return;
+      }
       elBtnExtraCamAdd.disabled = true;
       elBtnExtraCamAdd.textContent = "⏳ ĐANG THÊM...";
       try {
@@ -1942,6 +2298,7 @@
         if (res.ok) {
           setExtraCamFormVisible(false);
           fetchExtraCameras();
+          fetchCameraDevices();
         } else {
           showExtraCamFeedback(data.detail || "Không thêm được camera.", "error", 8000);
         }

@@ -23,7 +23,7 @@ display:
   show_ui: true
   window_name: "Fall and Stroke Warning System - Realtime Stream"
   show_bbox: true
-  show_skeleton: true
+  show_skeleton: false     # chỉ vẽ khung chữ nhật quanh người; AI vẫn dùng khung xương bên trong
   show_track_id: true
   show_action_label: true
   show_risk_gauge: true

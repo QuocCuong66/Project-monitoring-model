@@ -105,6 +105,7 @@ class EventLogger:
         clip_path: Optional[str] = None,
         camera_id: Optional[str] = None,
         camera_name: Optional[str] = None,
+        event_type: str = "possible_medical_emergency",
     ) -> AlertEvent:
         """Create, record, and persist a new emergency alert event.
 
@@ -119,6 +120,8 @@ class EventLogger:
             camera_id: Camera that raised the alert; part of the event id so two cameras
                 tracking "person 1" in the same second never collide.
             camera_name: Human-readable room / camera name shown in the UI and Telegram.
+            event_type: "fall" or "stroke_warning" (the stream that raised it); older events
+                carry "possible_medical_emergency".
 
         Returns:
             AlertEvent dataclass instance.
@@ -126,7 +129,8 @@ class EventLogger:
         now = datetime.utcnow()
         timestamp_str = now.isoformat() + "Z"
         cam_tag = f"_{safe_file_tag(camera_id)}" if camera_id else ""
-        event_id = f"evt_{now.strftime('%Y%m%d_%H%M%S')}{cam_tag}_trk{person_id}"
+        type_tag = {"fall": "_fall", "stroke_warning": "_stroke"}.get(event_type, "")
+        event_id = f"evt_{now.strftime('%Y%m%d_%H%M%S')}{cam_tag}_trk{person_id}{type_tag}"
 
         snapshot_rel_path = None
         if frame is not None and self.save_snapshots:
@@ -137,7 +141,7 @@ class EventLogger:
 
         event = AlertEvent(
             event_id=event_id,
-            event_type="possible_medical_emergency",
+            event_type=event_type,
             person_id=person_id,
             timestamp=timestamp_str,
             risk_score=round(risk_score, 3),

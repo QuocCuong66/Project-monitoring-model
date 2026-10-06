@@ -9,7 +9,7 @@
 
 param(
     [Parameter(Mandatory = $true)][string]$Version,
-    [string]$Repo = "QuocCuong66/Project-monitoring-model",
+    [string]$Repo = "QuocCuong66/elderly-ai-installer",
     [string]$AppShortName = "Fall_and_Stroke_Warning_System"
 )
 

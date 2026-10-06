@@ -7,43 +7,32 @@ import cv2
 
 
 def test_camera_access(device_index: int = 0) -> Tuple[bool, str, List[int]]:
-    """Kiểm tra quyền và khả năng mở camera trên Windows.
-    
+    """Kiểm tra quyền và khả năng mở ĐÚNG camera được chọn trên Windows.
+
+    Chỉ mở camera `device_index`: dò thử các cổng khác sẽ đánh thức camera điện thoại
+    (Phone Link) hoặc camera ảo dù người dùng không chọn chúng.
+
     Returns:
         (success: bool, message: str, working_indices: List[int])
     """
-    working_devices = []
-    
-    # Quét thử các cổng từ 0 đến 3
-    for idx in range(4):
-        # Thử DirectShow trước
-        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            # Thử Media Foundation (Windows native)
-            cap = cv2.VideoCapture(idx, cv2.CAP_MSMF)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(idx, cv2.CAP_ANY)
-            
+    cap = cv2.VideoCapture(device_index, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(device_index, cv2.CAP_MSMF)
+    try:
         if cap.isOpened():
             ret, frame = cap.read()
-            cap.release()
             if ret and frame is not None and frame.size > 0:
-                working_devices.append(idx)
-                
-    if device_index in working_devices:
-        return True, f"Camera {device_index} đang hoạt động bình thường.", working_devices
-        
-    if len(working_devices) > 0:
-        return True, f"Camera {device_index} không khả dụng, nhưng tìm thấy Camera {working_devices[0]} đang hoạt động.", working_devices
-        
-    # Không mở được bất kỳ camera nào
+                return True, f"Camera {device_index} đang hoạt động bình thường.", [device_index]
+    finally:
+        cap.release()
+
     msg = (
-        "Không thể mở Camera! Có thể do:\n"
+        f"Không thể mở Camera {device_index}! Có thể do:\n"
         "1. Quyền truy cập Camera trong Windows đang bị TẮT (Camera Privacy Settings).\n"
         "2. Đang có ứng dụng khác (Zoom, Teams, Google Meet, Zalo...) chiếm giữ Camera.\n"
         "3. Chưa cắm hoặc chưa nhận diện được thiết bị Camera USB."
     )
-    return False, msg, working_devices
+    return False, msg, []
 
 
 def request_windows_camera_permission_dialog() -> bool:

@@ -595,6 +595,140 @@
       font-weight: 300;
     }
 
+    /* DETAILED GUIDE PANELS */
+    .guide-details-box {
+      margin-top: 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 26px;
+      text-align: left;
+    }
+
+    .guide-panel {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 30px 28px;
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .guide-panel:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-hover);
+      border-color: var(--border-hover);
+    }
+
+    .guide-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 14px;
+      gap: 12px;
+    }
+
+    .guide-panel-header h3 {
+      font-size: 1.25rem;
+      font-weight: 300 !important;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .guide-badge-pill {
+      font-size: 0.85rem;
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid #bfdbfe;
+      white-space: nowrap;
+    }
+
+    .guide-steps-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .guide-steps-list li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      font-size: 0.98rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .guide-step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .code-snippet-box {
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.88rem;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      overflow-x: auto;
+      line-height: 1.6;
+      border: 1px solid #334155;
+    }
+
+    .code-comment {
+      color: #94a3b8;
+    }
+
+    .code-cmd {
+      color: #38bdf8;
+    }
+
+    .auto-run-callout {
+      margin-top: 32px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: var(--radius-md);
+      padding: 20px 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      color: #166534;
+      font-size: 0.98rem;
+      line-height: 1.6;
+      box-shadow: var(--shadow-sm);
+      text-align: left;
+    }
+
+    .callout-icon {
+      font-size: 1.8rem;
+      flex-shrink: 0;
+    }
+
+    .callout-title {
+      font-size: 1.1rem;
+      font-weight: 400 !important;
+      color: #14532d;
+      margin-bottom: 4px;
+    }
+
     /* ==========================================================================
        CALL TO ACTION (CTA) SECTION (KHUNG SÁNG SANG TRỌNG)
        ========================================================================== */
@@ -693,6 +827,7 @@
       .section-title h2 { font-size: 1.9rem; }
       .cta { padding: 48px 20px; }
       .btn { padding: 14px 28px; font-size: 1.05rem; width: 100%; }
+      .guide-details-box { grid-template-columns: 1fr; }
     }
 
     /* Multi-language Visibility */
@@ -738,8 +873,8 @@
   <div class="hero-content">
     <div class="hero-badge">
       <span>✨</span>
-      <span class="vi">v0.3.0 — Phiên bản mới nhất</span>
-      <span class="en">v0.3.0 — Latest Release</span>
+      <span class="vi">v0.3.2 — Phiên bản mới nhất</span>
+      <span class="en">v0.3.2 — Latest Release</span>
     </div>
     <h1>
       <span class="vi">Hệ Thống Cảnh Báo<br>Ngã & Đột Quỵ</span>
@@ -886,45 +1021,152 @@
     <div class="steps">
       <div class="step">
         <h3>
-          <span class="vi">Tải & cài đặt</span>
-          <span class="en">Download & Install</span>
+          <span class="vi">Tải bộ ứng dụng</span>
+          <span class="en">Download Package</span>
         </h3>
         <p>
-          <span class="vi">Tải tệp cài đặt Setup 1-Click cho Windows, không đòi hỏi cài đặt môi trường lập trình phức tạp.</span>
-          <span class="en">Download the 1-Click Windows Setup package. No manual Python or programming environment required.</span>
+          <span class="vi">Tải bản đóng gói độc lập cho Windows từ mục Releases, hoàn toàn không cần cài đặt Python.</span>
+          <span class="en">Download the standalone Windows release package. No Python or development setup required.</span>
         </p>
       </div>
 
       <div class="step">
         <h3>
-          <span class="vi">Kết nối camera</span>
+          <span class="vi">Kết nối Camera</span>
           <span class="en">Connect Camera</span>
         </h3>
         <p>
-          <span class="vi">Sử dụng webcam laptop sẵn có hoặc chọn camera an ninh IP qua giao diện trực quan.</span>
-          <span class="en">Use your laptop webcam or connect your home IP camera with a single click in the menu.</span>
+          <span class="vi">Cắm Webcam USB vào máy tính hoặc sử dụng webcam tích hợp trên laptop/camera IP.</span>
+          <span class="en">Plug in a USB webcam, use built-in laptop camera, or connect home IP camera.</span>
         </p>
       </div>
 
       <div class="step">
         <h3>
-          <span class="vi">Khởi chạy hệ thống</span>
-          <span class="en">Launch AI Engine</span>
+          <span class="vi">Mở ứng dụng .EXE</span>
+          <span class="en">Launch .EXE App</span>
         </h3>
         <p>
-          <span class="vi">Nhấp mở ứng dụng, AI tự động kích hoạt nhận diện tăng tốc DirectML / GPU ngay tức khắc.</span>
-          <span class="en">Open the app; AI acceleration automatically engages using DirectML or CUDA.</span>
+          <span class="vi">Nhấp đúp chuột vào tệp Fall_and_Stroke_Warning_System.exe. AI và Camera sẽ tự động chạy.</span>
+          <span class="en">Double-click Fall_and_Stroke_Warning_System.exe. AI and Camera start automatically.</span>
         </p>
       </div>
 
       <div class="step">
         <h3>
-          <span class="vi">Theo dõi & an tâm</span>
-          <span class="en">Monitor & Relax</span>
+          <span class="vi">Tự động giám sát 24/7</span>
+          <span class="en">Automatic 24/7 Safety</span>
         </h3>
         <p>
-          <span class="vi">Xem màn hình điều khiển tại localhost:8000. Hệ thống sẽ phát chuông cảnh báo khi có sự cố.</span>
-          <span class="en">View live dashboard at localhost:8000. The system alerts you immediately if any danger occurs.</span>
+          <span class="vi">Giao diện điều khiển mở ra ngay lập tức. Bật "Chạy cùng Windows" để bảo vệ người thân liên tục.</span>
+          <span class="en">Dashboard opens instantly. Enable "Autostart with Windows" for nonstop protection.</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- HƯỚNG DẪN CHI TIẾT THEO TỪNG ĐỐI TƯỢNG -->
+    <div class="guide-details-box">
+      <!-- Cột 1: Người dùng phổ thông -->
+      <div class="guide-panel">
+        <div class="guide-panel-header">
+          <h3>
+            <span>💻</span>
+            <span class="vi">Dành cho Người Dùng Cuối</span>
+            <span class="en">For End Users</span>
+          </h3>
+          <span class="guide-badge-pill">
+            <span class="vi">Bản chạy ngay (.EXE)</span>
+            <span class="en">Standalone (.EXE)</span>
+          </span>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.95rem;">
+          <span class="vi">Không cần hiểu biết về kỹ thuật lập trình. Mọi thư viện và mô hình AI đã được tích hợp sẵn.</span>
+          <span class="en">No technical skills required. All AI models, dependencies, and runtimes are pre-packaged.</span>
+        </p>
+        <ul class="guide-steps-list">
+          <li>
+            <span class="guide-step-num">1</span>
+            <div>
+              <strong style="color: var(--text);"><span class="vi">Tải về & giải nén:</span><span class="en">Download & Unpack:</span></strong>
+              <span class="vi"> Tải tệp zip từ nút <i>"Tải về bản cài đặt"</i> và giải nén thư mục ứng dụng ra ổ đĩa máy tính.</span>
+              <span class="en"> Download the zip package and extract the application folder to your PC.</span>
+            </div>
+          </li>
+          <li>
+            <span class="guide-step-num">2</span>
+            <div>
+              <strong style="color: var(--text);"><span class="vi">Khởi động 1-Click:</span><span class="en">1-Click Startup:</span></strong>
+              <span class="vi"> Nhấp đúp chuột vào tệp: <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-family:monospace; color:#2563eb;">Fall_and_Stroke_Warning_System.exe</code></span>
+              <span class="en"> Double-click: <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-family:monospace; color:#2563eb;">Fall_and_Stroke_Warning_System.exe</code></span>
+            </div>
+          </li>
+          <li>
+            <span class="guide-step-num">3</span>
+            <div>
+              <strong style="color: var(--text);"><span class="vi">Hệ thống tự động chạy:</span><span class="en">Automatic Execution:</span></strong>
+              <span class="vi"> Ứng dụng tự động kết nối camera, kích hoạt AI phân tích tư thế thời gian thực và mở cửa sổ giám sát mà không hiện cửa sổ dòng lệnh đen.</span>
+              <span class="en"> The app connects to the camera, engages real-time AI tracking, and launches the dashboard window without any console popups.</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Cột 2: Nhà phát triển / Lập trình viên -->
+      <div class="guide-panel">
+        <div class="guide-panel-header">
+          <h3>
+            <span>⚙️</span>
+            <span class="vi">Dành cho Nhà Phát Triển</span>
+            <span class="en">For Developers</span>
+          </h3>
+          <span class="guide-badge-pill">
+            <span class="vi">Mã nguồn Python</span>
+            <span class="en">Python Source</span>
+          </span>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.95rem;">
+          <span class="vi">Tùy biến thuật toán, huấn luyện lại mô hình hoặc tích hợp camera chuyên dụng.</span>
+          <span class="en">Customize algorithms, retrain AI models, or integrate custom surveillance cameras.</span>
+        </p>
+        <div class="code-snippet-box">
+          <div class="code-comment"><span class="vi"># 1. Tải mã nguồn từ GitHub</span><span class="en"># 1. Clone the repository</span></div>
+          <div class="code-cmd">git clone https://github.com/QuocCuong66/Project-monitoring-model.git</div>
+          <div class="code-cmd">cd Project-monitoring-model</div>
+          <br>
+          <div class="code-comment"><span class="vi"># 2. Cài đặt môi trường Python 3.11</span><span class="en"># 2. Setup Python 3.11 virtualenv</span></div>
+          <div class="code-cmd">py -3.11 -m venv .venv</div>
+          <div class="code-cmd">.\.venv\Scripts\activate</div>
+          <div class="code-cmd">pip install -r requirements.txt</div>
+          <br>
+          <div class="code-comment"><span class="vi"># 3. Khởi chạy toàn bộ hệ thống</span><span class="en"># 3. Run entire system with 1 command</span></div>
+          <div class="code-cmd">python main.py</div>
+        </div>
+        <p style="font-size: 0.92rem; color: var(--text-muted); margin-top: -6px;">
+          <span class="vi">Mở trình duyệt tại <b>http://localhost:8000</b> để truy cập trang điều khiển và xem API Swagger.</span>
+          <span class="en">Open <b>http://localhost:8000</b> to access the dashboard and interactive Swagger API.</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- HỘP THÔNG TIN CƠ CHẾ TỰ ĐỘNG CHẠY TRÊN THIẾT BỊ -->
+    <div class="auto-run-callout">
+      <div class="callout-icon">🚀</div>
+      <div>
+        <div class="callout-title">
+          <span class="vi">Hệ thống có tự động chạy trên thiết bị không?</span>
+          <span class="en">Does the system run automatically on the device?</span>
+        </div>
+        <p>
+          <span class="vi"><b>CÓ, hoàn toàn tự động!</b> Khi mở tệp <code style="background:rgba(255,255,255,0.8); padding:2px 6px; border-radius:4px; font-family:monospace;">Fall_and_Stroke_Warning_System.exe</code> (hoặc chạy lệnh <code style="background:rgba(255,255,255,0.8); padding:2px 6px; border-radius:4px; font-family:monospace;">python main.py</code>), toàn bộ tiến trình AI, xử lý video camera và máy chủ API đều tự động khởi động cục bộ ngay trên thiết bị của bạn.</span>
+          <span class="en"><b>YES, 100% automatic!</b> When launching <code style="background:rgba(255,255,255,0.8); padding:2px 6px; border-radius:4px; font-family:monospace;">Fall_and_Stroke_Warning_System.exe</code> (or running <code style="background:rgba(255,255,255,0.8); padding:2px 6px; border-radius:4px; font-family:monospace;">python main.py</code>), the AI engine, camera stream, and API server start automatically on your local hardware.</span>
+        </p>
+        <p style="margin-top: 8px;">
+          <span class="vi">🛡️ <b>Tự động bảo vệ khi bật máy tính:</b> Bạn có thể vào nút <b>[⚙️ Cài Đặt]</b> ở góc phải trên giao diện điều khiển và bật công tắc <i>"Tự động chạy nền khi mở máy tính"</i>. Mỗi khi máy tính khởi động, hệ thống sẽ tự động chạy ngầm để bảo vệ người thân 24/7.</span>
+          <span class="en">🛡️ <b>Autostart on boot:</b> Open <b>[⚙️ Settings]</b> and turn on <i>"Run in background on Windows startup"</i> to safeguard your loved ones 24/7 automatically.</span>
+        </p>
+        <p style="margin-top: 8px; font-size: 0.92rem; opacity: 0.9;">
+          <span class="vi">⚠️ <i>Lưu ý:</i> File HTML giao diện (<code style="font-family:monospace;">frontend/index.html</code>) là trang khách (frontend) nhận dữ liệu từ động cơ AI qua cổng nội bộ. Nếu người dùng chỉ mở riêng file HTML trong trình duyệt mà chưa chạy ứng dụng thì trang sẽ báo "Mất kết nối" do trình duyệt không thể tự chạy mô hình AI độc lập mà cần tiến trình nền khởi động trước.</span>
+          <span class="en">⚠️ <i>Note:</i> The HTML dashboard (<code style="font-family:monospace;">frontend/index.html</code>) communicates with the AI engine on localhost. You must launch the app executable or server first so the web dashboard can receive the real-time AI stream.</span>
         </p>
       </div>
     </div>

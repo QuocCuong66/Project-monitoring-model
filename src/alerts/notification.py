@@ -85,9 +85,16 @@ class NotificationDispatcher:
             if event.camera_name:
                 safe_name = "".join("\\" + ch if ch in "_*`[" else ch for ch in event.camera_name)
                 camera_line = f"• *Camera:* {safe_name}\n"
+            heading = {
+                "fall": "🚨 *NGHI TÉ NGÃ — POSSIBLE FALL*",
+                "stroke_warning": "⚠️ *DẤU HIỆU CẢNH BÁO ĐỘT QUỴ / BỆNH CẤP — STROKE WARNING SIGNS*",
+            }.get(event.event_type, "🚨 *POSSIBLE MEDICAL EMERGENCY DETECTED*")
+            signs = event.evidence.get("stroke_signs") or []
+            signs_line = f"• *Signs:* `{', '.join(signs)}`\n" if event.event_type == "stroke_warning" and signs else ""
             msg_text = (
-                f"🚨 *POSSIBLE MEDICAL EMERGENCY DETECTED*\n\n"
+                f"{heading}\n\n"
                 f"{camera_line}"
+                f"{signs_line}"
                 f"• *Person ID:* `{event.person_id}`\n"
                 f"• *Risk Score:* `{event.risk_score:.2f}`\n"
                 f"• *Primary Action:* `{event.evidence.get('primary_action', 'unknown')}`\n"

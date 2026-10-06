@@ -202,8 +202,19 @@ class ActionClassifier:
         drop_sev = getattr(kinematics, "drop_severity_score", 0.0)
         torso_angle = getattr(kinematics, "torso_angle_curr", 0.0)
         ar = getattr(kinematics, "aspect_ratio_curr", 0.5)
+        if not getattr(kinematics, "lower_body_visible", True):
+            ar = 0.5  # upper-body-only bbox: its width says nothing about lying down
         immob = getattr(kinematics, "immobility_index", 0.0)
         vy = getattr(kinematics, "vertical_velocity", 0.0)
+
+        # 0. Legs still carry the body (picking something up, squatting, kneeling): bending, not a fall
+        if getattr(kinematics, "feet_supported", False):
+            fused[4] = max(fused[4], 0.70)         # bending
+            fused[2] = max(fused[2], 0.15)         # sitting / squatting
+            for idx in (3, 5, 9):                  # lying, falling, immobile
+                fused[idx] = min(fused[idx], 0.02)
+            s = float(np.sum(fused))
+            return (fused / s) if s > 0 else probs
 
         # 1. Sudden Drop / Fall Event Confirmation
         if drop_sev >= 0.50 or (vy >= 2.0 and torso_angle >= 50.0):
@@ -250,11 +261,17 @@ class ActionClassifier:
         if kinematics is not None:
             torso_angle = getattr(kinematics, "torso_angle_curr", 0.0)
             ar = getattr(kinematics, "aspect_ratio_curr", 0.5)
+            if not getattr(kinematics, "lower_body_visible", True):
+                ar = 0.5  # upper-body-only bbox: its width says nothing about lying down
             drop_sev = getattr(kinematics, "drop_severity_score", 0.0)
             immob = getattr(kinematics, "immobility_index", 0.0)
             vy = getattr(kinematics, "vertical_velocity", 0.0)
 
-            if drop_sev >= 0.50 or (vy >= 2.0 and torso_angle >= 50.0):
+            if getattr(kinematics, "feet_supported", False):
+                probs[4] = 0.75  # bending (legs still carry the body)
+                probs[2] = 0.15  # squatting / sitting
+                probs[1] = 0.10
+            elif drop_sev >= 0.50 or (vy >= 2.0 and torso_angle >= 50.0):
                 probs[5] = 0.85  # falling
                 probs[7] = 0.10  # stumbling
                 probs[3] = 0.05  # lying

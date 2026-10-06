@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "elderly-ai-monitor"
-version = "0.3.0"
+version = "0.3.2"
 description = "Real-time AI Camera Monitoring & Abnormal Behavior Detection System for Elderly Safety"
 authors = [{ name = "Quốc Cường" }]
 readme = "README.md"

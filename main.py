@@ -117,16 +117,14 @@ def initialize_camera_stream(
     if source_type == "webcam":
         w_idx = device_index if device_index is not None else camera_cfg.get("webcam", {}).get("device_index", 0)
         
-        # Kiểm tra quyền và tính khả dụng của Camera trên Windows
+        # Kiểm tra quyền của ĐÚNG camera đã chọn; không tự chuyển sang camera khác
+        # (camera khác có thể là điện thoại liên kết với Windows hoặc camera ảo).
         try:
             from src.camera.camera_permission import test_camera_access, request_windows_camera_permission_dialog
-            ok, msg, working_devices = test_camera_access(w_idx)
+            ok, msg, _working = test_camera_access(w_idx)
             if not ok:
                 print(f"  [Cảnh báo Camera] {msg}")
                 request_windows_camera_permission_dialog()
-            elif w_idx not in working_devices and len(working_devices) > 0:
-                print(f"  [Thông báo Camera] Camera {w_idx} bận. Tự động chuyển sang Camera {working_devices[0]}.")
-                w_idx = working_devices[0]
         except Exception as e:
             print(f"  [Notice] Bỏ qua kiểm tra quyền camera: {e}")
 

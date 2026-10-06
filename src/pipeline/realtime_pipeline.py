@@ -20,7 +20,7 @@ from src.action.action_classifier import ActionClassifier
 from src.action.behavior_classifier import BehaviorSequenceAnalyzer
 from src.anomaly.anomaly_detector import AnomalyDetector
 from src.anomaly.anomaly_score import ReconstructionAnomalyScorer, AnomalyResult
-from src.risk.risk_engine import RiskEngine, RiskAssessment
+from src.risk.risk_engine import RiskEngine, display_action as _display_action, RiskAssessment
 from src.risk.threshold_manager import ThresholdManager
 from src.alerts.alert_manager import AlertManager, AlertEvent
 from src.detection.motion_gater import MotionGater, MotionGateResult
@@ -415,6 +415,8 @@ class RealtimePipeline:
                     anomaly_res=anomaly_res,
                     kinematics=kinematics,
                     timestamp=timestamp,
+                    snapshot=snapshots_hist[-1],
+                    frame_size=(frame.shape[1], frame.shape[0]),
                 )
                 assessments.append(assessment)
 
@@ -431,13 +433,11 @@ class RealtimePipeline:
                         alerted_bbox=track.bbox,
                     )
 
-                alert_evt = self.alert_manager.process_assessment(
+                alerts_raised.extend(self.alert_manager.process(
                     assessment=assessment,
                     frame=snapshot_frame,
                     timestamp=timestamp,
-                )
-                if alert_evt:
-                    alerts_raised.append(alert_evt)
+                ))
 
                 # Render Visual Overlays
                 if pose is not None and self.visualizer.show_skeleton:
@@ -449,7 +449,7 @@ class RealtimePipeline:
                     track_id=tid,
                     bbox=track.bbox,
                     state=assessment.state,
-                    action=action_pred.primary_action,
+                    action=_display_action(assessment.evidence),
                     risk_score=assessment.risk_score,
                     evidence=assessment.evidence,
                 )
