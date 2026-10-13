@@ -3,4 +3,4 @@
 Keep in sync with pyproject.toml and installer/setup.iss (tests/test_updater.py checks it).
 """
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
