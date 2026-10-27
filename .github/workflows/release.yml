@@ -9,7 +9,7 @@
 #   Variable SIGNPATH_SIGNING_POLICY_SLUG   (vd: release-signing)
 # Chưa cấu hình -> vẫn build, bản chưa ký chỉ được lưu làm artifact để thử, KHÔNG phát hành.
 
-name: Build & Release Windows Installer
+name: Build & Release Installers (Windows + macOS)
 
 on:
   push:
@@ -145,3 +145,82 @@ jobs:
           } else {
             gh release create $tag $asset --title "Fall & Stroke Warning $tag" --notes "Tải bộ cài Windows: **${env:APP}_Setup.exe** bên dưới (đã ký số)."
           }
+
+  # Bản macOS (Apple Silicon, .dmg). Chưa ký Developer ID / notarize: lần đầu mở cần
+  # chuột phải -> Open (hoặc System Settings -> Privacy & Security -> Open Anyway).
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Đọc version và kiểm tra khớp với tag
+        id: version
+        run: |
+          version=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "Tag $GITHUB_REF_NAME không khớp version v$version trong pyproject.toml"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cài môi trường .venv
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements-macos.txt pyinstaller
+
+      - name: Tạo icon .icns từ app_icon.png
+        run: |
+          mkdir app_icon.iconset
+          for s in 16 32 128 256 512; do
+            sips -z $s $s app_icon.png --out app_icon.iconset/icon_${s}x${s}.png >/dev/null
+            sips -z $((s*2)) $((s*2)) app_icon.png --out app_icon.iconset/icon_${s}x${s}@2x.png >/dev/null
+          done
+          iconutil -c icns app_icon.iconset -o app_icon.icns
+
+      - name: PyInstaller (.app)
+        run: .venv/bin/pyinstaller --noconfirm --clean fall_and_stroke_monitor.spec
+
+      - name: Ký ad-hoc và đóng gói .dmg
+        run: |
+          codesign --force --deep --sign - "dist/${APP}.app"
+          mkdir dmg && cp -R "dist/${APP}.app" dmg/ && ln -s /Applications dmg/Applications
+          mkdir -p release
+          hdiutil create -volname "Fall & Stroke Warning" -srcfolder dmg -ov -format UDZO "release/${APP}_macOS.dmg"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: release/${{ env.APP }}_macOS.dmg
+          if-no-files-found: error
+
+      - name: Phát hành lên GitHub Releases
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="release/${APP}_macOS.dmg"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "Fall & Stroke Warning $GITHUB_REF_NAME" --notes "Windows: **${APP}_Setup.exe** · macOS (Apple Silicon): **${APP}_macOS.dmg**" \
+            || true
+          gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
+
+      # Đưa .dmg sang repo phát hành công khai (trang chủ tải từ đó).
+      # Cần secret INSTALLER_REPO_TOKEN: PAT có quyền Contents: write trên elderly-ai-installer.
+      - name: Phát hành sang elderly-ai-installer
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.INSTALLER_REPO_TOKEN }}
+          REPO: QuocCuong66/elderly-ai-installer
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::Chưa có secret INSTALLER_REPO_TOKEN, bỏ qua."; exit 0; fi
+          asset="release/${APP}_macOS.dmg"
+          gh release view "$GITHUB_REF_NAME" -R "$REPO" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" -R "$REPO" --title "Fall & Stroke Warning $GITHUB_REF_NAME" --notes "macOS (Apple Silicon): **${APP}_macOS.dmg**" \
+            || true
+          gh release upload "$GITHUB_REF_NAME" "$asset" -R "$REPO" --clobber

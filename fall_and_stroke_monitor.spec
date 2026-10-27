@@ -6,6 +6,12 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
 project_root = Path(SPECPATH).resolve()
+IS_MAC = sys.platform == 'darwin'
+APP_NAME = 'Fall_and_Stroke_Warning_System'
+# macOS cần icon .icns (CI tạo từ app_icon.png bằng iconutil); thiếu thì dùng icon mặc định.
+APP_ICON = str(project_root / 'app_icon.icns') if IS_MAC else str(project_root / 'app_icon.ico')
+if IS_MAC and not Path(APP_ICON).exists():
+    APP_ICON = None
 
 # Tự động thu thập thư viện động, file dữ liệu của ONNX Runtime và OpenCV
 ort_datas, ort_binaries, ort_hidden = collect_all('onnxruntime')
@@ -86,7 +92,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Fall_and_Stroke_Warning_System',
+    name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -97,7 +103,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(project_root / 'app_icon.ico'),
+    icon=APP_ICON,
 )
 
 coll = COLLECT(
@@ -108,5 +114,23 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='Fall_and_Stroke_Warning_System',
+    name=APP_NAME,
 )
+
+if IS_MAC:
+    import tomllib
+    version = tomllib.load(open(project_root / 'pyproject.toml', 'rb'))['project']['version']
+    app = BUNDLE(
+        coll,
+        name=f'{APP_NAME}.app',
+        icon=APP_ICON,
+        bundle_identifier='io.github.quoccuong66.fallstrokewarning',
+        info_plist={
+            'CFBundleDisplayName': 'Fall & Stroke Warning',
+            'CFBundleShortVersionString': version,
+            'CFBundleVersion': version,
+            'NSCameraUsageDescription': 'Ứng dụng cần camera để phát hiện té ngã / bất thường và cảnh báo người thân.',
+            'NSHighResolutionCapable': True,
+            'LSMinimumSystemVersion': '11.0',
+        },
+    )

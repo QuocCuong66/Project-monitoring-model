@@ -26,6 +26,26 @@ from typing import Optional
 APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 LOG_FILE_PATH = APP_DIR / "app_log.txt"
 
+# macOS: không có %APPDATA% và gói .app không ghi được -> dữ liệu người dùng + log về Application Support.
+if sys.platform == "darwin":
+    _mac_support = Path.home() / "Library" / "Application Support"
+    os.environ.setdefault("APPDATA", str(_mac_support))
+    if getattr(sys, "frozen", False):
+        LOG_FILE_PATH = _mac_support / "FallStrokeWarning" / "app_log.txt"
+        LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # Thư mục làm việc ghi được (data/, certs/...), trỏ symlink tới dữ liệu chỉ-đọc trong gói .app
+        _work_root = LOG_FILE_PATH.parent / "app"
+        _work_root.mkdir(exist_ok=True)
+        _bundle_root = Path(getattr(sys, "_MEIPASS", APP_DIR))
+        for _name in ("configs", "frontend", "models", "app_icon.png"):
+            _link, _target = _work_root / _name, _bundle_root / _name
+            if _target.exists() and (_link.is_symlink() or not _link.exists()):
+                if _link.is_symlink() and _link.resolve() != _target.resolve():
+                    _link.unlink()  # gói .app đã bị chuyển chỗ / cập nhật
+                if not _link.is_symlink():
+                    _link.symlink_to(_target)
+        os.environ["FSW_PROJECT_ROOT"] = str(_work_root)
+
 class SafeLogWriter:
     """Writer ghi đồng thời ra file log và console nếu có, tương thích chuẩn IO stream."""
     def __init__(self, filepath: Path, original_stream=None):
@@ -98,7 +118,16 @@ multiprocessing.freeze_support()
 
 
 def show_native_message_box(title: str, message: str, icon_type: str = "info") -> None:
-    """Hiển thị hộp thoại thông báo Windows Native không cần thư viện ngoài."""
+    """Hiển thị hộp thoại thông báo native (Windows MessageBox / macOS osascript)."""
+    if sys.platform == "darwin":
+        try:
+            icon = {"error": "stop", "warning": "caution"}.get(icon_type, "note")
+            esc = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
+            script = f'display dialog "{esc(message)}" with title "{esc(title)}" buttons {{"OK"}} with icon {icon}'
+            subprocess.run(["osascript", "-e", script], capture_output=True, timeout=300)
+        except Exception:
+            pass
+        return
     try:
         flags = 0x00040000  # MB_TOPMOST
         if icon_type == "error":
@@ -114,6 +143,13 @@ def show_native_message_box(title: str, message: str, icon_type: str = "info") -
 
 def find_system_browser() -> Optional[str]:
     """Tìm đường dẫn trình duyệt Chromium hỗ trợ chế độ App-Mode (--app)."""
+    if sys.platform == "darwin":
+        for app in ("Google Chrome", "Microsoft Edge", "Brave Browser", "Chromium"):
+            for base in (Path("/Applications"), Path.home() / "Applications"):
+                p = base / f"{app}.app" / "Contents" / "MacOS" / app
+                if p.is_file():
+                    return str(p)
+        return None
     candidates = [
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",

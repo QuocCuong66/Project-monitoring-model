@@ -15,7 +15,12 @@ def get_project_root() -> Path:
     """Return the absolute path to the project root directory.
     
     Supports normal development as well as PyInstaller frozen executables.
+    FSW_PROJECT_ROOT overrides it (macOS .app: the bundle is read-only, app_runner points this
+    at a writable folder in Application Support).
     """
+    override = os.getenv("FSW_PROJECT_ROOT")
+    if override:
+        return Path(override)
     if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).resolve().parent
         if (exe_dir / "configs").exists() or (exe_dir / "frontend").exists():
