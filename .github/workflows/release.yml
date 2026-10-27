@@ -210,17 +210,3 @@ jobs:
             || true
           gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
 
-      # Đưa .dmg sang repo phát hành công khai (trang chủ tải từ đó).
-      # Cần secret INSTALLER_REPO_TOKEN: PAT có quyền Contents: write trên elderly-ai-installer.
-      - name: Phát hành sang elderly-ai-installer
-        if: github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ secrets.INSTALLER_REPO_TOKEN }}
-          REPO: QuocCuong66/elderly-ai-installer
-        run: |
-          if [ -z "$GH_TOKEN" ]; then echo "::warning::Chưa có secret INSTALLER_REPO_TOKEN, bỏ qua."; exit 0; fi
-          asset="release/${APP}_macOS.dmg"
-          gh release view "$GITHUB_REF_NAME" -R "$REPO" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" -R "$REPO" --title "Fall & Stroke Warning $GITHUB_REF_NAME" --notes "macOS (Apple Silicon): **${APP}_macOS.dmg**" \
-            || true
-          gh release upload "$GITHUB_REF_NAME" "$asset" -R "$REPO" --clobber
