@@ -1025,3 +1025,14 @@ if frontend_dir.exists():
         """Serve apple touch icon."""
         return FileResponse(str(frontend_dir / "apple-touch-icon.png"))
 
+    @app.get("/huong-dan.html")
+    @app.get("/guide")
+    def serve_frontend_guide():
+        """Serve bilingual user guide page."""
+        guide_path = frontend_dir / "huong-dan.html"
+        if not guide_path.exists():
+            guide_path = get_project_root() / "landing" / "huong-dan.html"
+        if guide_path.exists():
+            return FileResponse(str(guide_path))
+        return FileResponse(str(frontend_dir / "index.html"))
+

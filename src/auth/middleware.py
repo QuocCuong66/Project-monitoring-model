@@ -50,6 +50,8 @@ def _public_paths() -> list[str]:
         "/logo.png",
         "/apple-touch-icon.png",
         "/static",
+        "/huong-dan.html",
+        "/guide",
     ]
     configured = _security_config().get("auth", {}).get("public_paths", default)
     return configured

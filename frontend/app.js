@@ -1976,7 +1976,7 @@
 
   document.querySelectorAll(".sidebar-link").forEach(link => {
     link.addEventListener("click", (e) => {
-      if (link.id === "sidebar-btn-settings") return;
+      if (link.id === "sidebar-btn-settings" || link.id === "sidebar-btn-guide") return;
       document.querySelectorAll(".sidebar-link").forEach(l => l.classList.remove("active"));
       link.classList.add("active");
     });

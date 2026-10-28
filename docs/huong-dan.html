@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hướng Dẫn Sử Dụng — Fall & Stroke Warning System</title>
-  <meta name="description" content="Hướng dẫn chi tiết từ A đến Z: cài đặt, kết nối webcam và camera IP, chạy giám sát, nhận cảnh báo Telegram, bật tắt và xử lý sự cố cho Hệ thống Cảnh báo Ngã & Đột quỵ.">
+  <title>Hướng Dẫn Sử Dụng / User Guide — Fall & Stroke Warning System</title>
+  <meta name="description" content="Hướng dẫn chi tiết từ A đến Z: cài đặt, kết nối webcam và camera IP, chạy giám sát, nhận cảnh báo Telegram, bật tắt và xử lý sự cố cho Hệ thống Cảnh báo Ngã & Đột quỵ. Complete step-by-step user guide for Fall & Stroke Warning System.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400&family=Outfit:wght@200;300;400&display=swap" rel="stylesheet">
@@ -65,6 +65,37 @@
     }
     kbd { box-shadow: inset 0 -1px 0 var(--border-subtle); white-space: nowrap; }
 
+    /* Multi-language Visibility */
+    [data-lang="en"] .vi { display: none !important; }
+    [data-lang="vi"] .en { display: none !important; }
+
+    /* Language Switcher Button */
+    .lang-btn {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      padding: 8px 16px;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: var(--text);
+      font-weight: 400;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .lang-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-light);
+      transform: translateY(-2px) scale(1.04);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.15);
+    }
+    .lang-btn:active {
+      transform: translateY(0) scale(0.96);
+    }
+
     /* NAV */
     nav {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
@@ -83,7 +114,7 @@
     }
     .nav-brand img { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; }
     .nav-brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .nav-actions { display: flex; gap: 10px; flex-shrink: 0; }
+    .nav-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .nav-btn {
       display: inline-flex; align-items: center; gap: 8px;
       padding: 9px 18px; border-radius: var(--radius-pill);
@@ -98,104 +129,160 @@
     /* HERO */
     .hero { padding: 132px 16px 40px; text-align: center; }
     .hero-badge {
-      display: inline-block; padding: 6px 16px; border-radius: var(--radius-pill);
-      background: var(--primary-light); color: var(--primary); font-size: 0.95rem; margin-bottom: 18px;
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; border-radius: var(--radius-pill);
+      font-size: 0.92rem; color: var(--primary);
+      background: #fff; border: 1px solid rgba(37, 99, 235, 0.25);
+      margin-bottom: 16px; box-shadow: var(--shadow-sm);
     }
-    .hero h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 300; line-height: 1.2; letter-spacing: -0.5px; }
-    .hero p { max-width: 720px; margin: 16px auto 0; color: var(--text-secondary); font-size: 1.12rem; }
-    .lang-note {
-      display: none; max-width: 720px; margin: 18px auto 0; padding: 10px 16px;
-      border-radius: var(--radius-sm); background: var(--amber-bg); color: var(--amber); font-size: 0.95rem;
+    .hero h1 {
+      font-size: clamp(2rem, 4vw, 3rem);
+      letter-spacing: -0.02em; margin-bottom: 12px;
+      background: linear-gradient(135deg, #0f172a 30%, #2563eb 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    [data-lang="en"] .lang-note { display: block; }
+    .hero p { max-width: 720px; margin: 0 auto; color: var(--text-muted); font-size: 1.15rem; }
 
-    /* LAYOUT */
+    /* LAYOUT: TOC + CONTENT */
     .layout {
-      max-width: 1200px; margin: 0 auto; padding: 0 16px 80px;
-      display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 36px; align-items: start;
+      max-width: 1200px; margin: 0 auto 80px; padding: 0 16px;
+      display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 36px;
+      align-items: start;
     }
+
+    /* TOC */
     .toc {
       position: sticky; top: 96px;
-      background: var(--bg-card); border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-sm);
+      background: #fff; border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md); padding: 20px;
+      box-shadow: var(--shadow-card);
       max-height: calc(100vh - 120px); overflow-y: auto;
     }
-    .toc-title { font-size: 0.85rem; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 10px; }
-    .toc ol { list-style: none; counter-reset: toc; }
-    .toc li { counter-increment: toc; }
+    .toc-title {
+      font-size: 0.78rem; letter-spacing: 0.1em; color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .toc ol { list-style: none; counter-reset: toc-step; display: flex; flex-direction: column; gap: 4px; }
+    .toc li { counter-increment: toc-step; font-size: 0.95rem; }
     .toc a {
-      display: flex; gap: 10px; padding: 7px 10px; border-radius: 8px;
-      text-decoration: none; color: var(--text-secondary); font-size: 0.97rem; line-height: 1.35;
+      display: block; padding: 6px 10px; border-radius: 8px;
+      color: var(--text-secondary); text-decoration: none;
+      transition: all 0.15s ease;
     }
-    .toc a::before { content: counter(toc); color: var(--primary); min-width: 18px; }
-    .toc a:hover, .toc a.active { background: var(--primary-light); color: var(--primary); }
+    .toc a::before {
+      content: counter(toc-step) ". ";
+      color: var(--text-muted); font-size: 0.88em;
+    }
+    .toc a:hover { background: var(--primary-light); color: var(--primary); }
+    .toc a.active { background: var(--primary-light); color: var(--primary); font-weight: 400; }
 
-    /* SECTIONS */
-    main { min-width: 0; }
+    /* MAIN CONTENT */
+    main { display: flex; flex-direction: column; gap: 36px; min-width: 0; }
+
     section.step {
-      background: var(--bg-card); border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-lg); box-shadow: var(--shadow-card);
-      padding: 34px 36px; margin-bottom: 26px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 36px 36px 32px;
+      box-shadow: var(--shadow-card);
     }
-    .step-head { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+    .step-head {
+      display: flex; align-items: center; gap: 16px;
+      margin-bottom: 20px; padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
     .step-num {
-      flex-shrink: 0; width: 46px; height: 46px; border-radius: 14px;
-      display: grid; place-items: center; font-size: 1.25rem; color: #fff;
+      width: 44px; height: 44px; border-radius: 12px;
       background: linear-gradient(135deg, #2563eb 0%, #0284c7 100%);
+      color: #fff; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1.25rem; flex-shrink: 0; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
     }
-    .step-head h2 { font-size: 1.6rem; font-weight: 300; line-height: 1.25; }
-    section.step h3 { font-size: 1.18rem; margin: 26px 0 10px; color: var(--text); }
-    section.step p { color: var(--text-secondary); margin: 10px 0; }
-    section.step ul, section.step ol.steps { margin: 10px 0 10px 4px; padding-left: 22px; color: var(--text-secondary); }
-    section.step li { margin: 7px 0; }
-    ol.steps li::marker { color: var(--primary); }
-    .ui { color: var(--primary); background: var(--primary-light); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+    .step-head h2 { font-size: 1.6rem; letter-spacing: -0.01em; color: var(--text); }
 
-    /* CALLOUTS */
+    h3 { font-size: 1.18rem; margin: 24px 0 10px; color: var(--text); }
+    p { margin-bottom: 12px; color: var(--text-secondary); }
+    ul, ol.steps { margin: 12px 0 16px 20px; color: var(--text-secondary); }
+    li { margin-bottom: 8px; }
+
+    /* UI pill */
+    .ui {
+      display: inline-block;
+      background: #eff6ff; color: #1e40af;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px; padding: 1px 8px;
+      font-size: 0.9em; font-weight: 400;
+      white-space: nowrap;
+    }
+
+    /* Callout */
     .callout {
-      display: flex; gap: 14px; padding: 16px 18px; border-radius: var(--radius-md);
-      margin: 18px 0; font-size: 1rem; line-height: 1.6;
+      display: flex; gap: 14px;
+      padding: 16px 18px; border-radius: var(--radius-md);
+      margin: 16px 0; font-size: 0.98rem; line-height: 1.6;
     }
-    .callout .ico { font-size: 1.3rem; line-height: 1.3; flex-shrink: 0; }
-    .callout.info { background: var(--primary-light); color: #1e3a8a; }
-    .callout.tip { background: var(--green-bg); color: #065f46; }
-    .callout.warn { background: var(--amber-bg); color: #78350f; }
-    .callout.danger { background: var(--red-bg); color: #7f1d1d; }
+    .callout .ico { font-size: 1.3rem; flex-shrink: 0; line-height: 1.3; }
+    .callout.tip { background: var(--green-bg); border: 1px solid rgba(5, 150, 105, 0.25); color: #065f46; }
+    .callout.info { background: var(--primary-light); border: 1px solid rgba(37, 99, 235, 0.25); color: #1e40af; }
+    .callout.warn { background: var(--amber-bg); border: 1px solid rgba(180, 83, 9, 0.25); color: #92400e; }
+    .callout.danger { background: var(--red-bg); border: 1px solid rgba(220, 38, 38, 0.25); color: #991b1b; }
 
-    /* TABLES */
-    .table-wrap { overflow-x: auto; margin: 14px 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
-    table { width: 100%; border-collapse: collapse; font-size: 0.98rem; min-width: 520px; }
-    th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
-    th { background: var(--bg-surface); font-weight: 400; color: var(--text); }
-    td { color: var(--text-secondary); }
+    /* Tables */
+    .table-wrap { overflow-x: auto; margin: 16px 0; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; background: #fff; }
+    th, td { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
+    th { background: var(--bg-surface); color: var(--text); font-weight: 400; font-size: 0.85rem; letter-spacing: 0.05em; }
     tr:last-child td { border-bottom: none; }
+    td:first-child { color: var(--text); font-weight: 400; white-space: nowrap; }
 
-    .state-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; }
-
-    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 14px 0; }
-    .mini-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 18px; background: var(--bg-page); }
-    .mini-card h4 { font-size: 1.05rem; margin-bottom: 6px; }
-    .mini-card p { margin: 0; font-size: 0.97rem; }
-
-    details {
-      border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
-      padding: 0 16px; margin: 10px 0; background: var(--bg-page);
+    /* Grid mini cards */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 16px 0; }
+    .mini-card {
+      background: var(--bg-surface); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md); padding: 16px;
     }
-    details[open] { padding-bottom: 12px; }
-    summary { cursor: pointer; padding: 13px 0; color: var(--text); list-style: none; display: flex; gap: 10px; }
+    .mini-card h4 { font-size: 1.05rem; margin-bottom: 6px; color: var(--text); }
+    .mini-card p { font-size: 0.95rem; margin-bottom: 0; color: var(--text-muted); }
+
+    /* Status dot */
+    .state-dot {
+      display: inline-block; width: 10px; height: 10px;
+      border-radius: 50%; margin-right: 6px; vertical-align: middle;
+    }
+
+    /* Details */
+    details {
+      background: var(--bg-surface); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md); padding: 14px 18px; margin: 10px 0;
+      transition: all 0.2s ease;
+    }
+    details[open] { background: #fff; }
+    summary {
+      cursor: pointer; font-size: 1.02rem; color: var(--text);
+      user-select: none; list-style: none;
+      display: flex; align-items: center; justify-content: space-between;
+    }
     summary::-webkit-details-marker { display: none; }
-    summary::before { content: "›"; color: var(--primary); transition: transform 0.2s; display: inline-block; }
-    details[open] summary::before { transform: rotate(90deg); }
+    summary::after { content: "+"; font-size: 1.4rem; color: var(--text-muted); transition: transform 0.2s; }
+    details[open] summary::after { content: "−"; }
+    details > :not(summary) { margin-top: 12px; }
 
-    footer { text-align: center; padding: 30px 16px 40px; color: var(--text-muted); font-size: 0.95rem; }
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 32px 16px; text-align: center;
+      color: var(--text-muted); font-size: 0.92rem;
+      background: rgba(255, 255, 255, 0.7);
+    }
 
+    /* RESPONSIVE */
     @media (max-width: 900px) {
-      .layout { grid-template-columns: minmax(0, 1fr); }
-      .toc { position: static; max-height: none; }
+      .layout { grid-template-columns: 1fr; }
+      .toc { display: none; }
+      section.step { padding: 28px 22px; }
     }
     @media (max-width: 600px) {
       .nav-brand span { display: none; }
-      .nav-btn { padding: 8px 14px; font-size: 0.92rem; }
+      .nav-btn, .lang-btn { padding: 8px 12px; font-size: 0.88rem; }
       .hero { padding-top: 112px; }
       section.step { padding: 24px 18px; border-radius: var(--radius-md); }
       .step-head h2 { font-size: 1.32rem; }
@@ -213,39 +300,60 @@
       <span>Fall & Stroke Warning</span>
     </a>
     <div class="nav-actions">
-      <a href="index.html" class="nav-btn">← Trang chủ</a>
-      <a href="https://github.com/QuocCuong66/elderly-ai-installer/releases/latest/download/Fall_and_Stroke_Warning_System_Setup.exe" class="nav-btn primary">Tải về</a>
+      <button class="lang-btn" onclick="toggleLang()" title="Đổi ngôn ngữ Tiếng Việt / English">
+        <span class="vi">🇻🇳 Tiếng Việt</span>
+        <span class="en">🇬🇧 English</span>
+      </button>
+      <a href="index.html" class="nav-btn">
+        <span class="vi">← Trang chủ</span>
+        <span class="en">← Home</span>
+      </a>
+      <a href="https://github.com/QuocCuong66/elderly-ai-installer/releases/latest/download/Fall_and_Stroke_Warning_System_Setup.exe" class="nav-btn primary">
+        <span class="vi">Tải về</span>
+        <span class="en">Download</span>
+      </a>
     </div>
   </div>
 </nav>
 
 <header class="hero">
-  <span class="hero-badge">📘 Hướng dẫn sử dụng</span>
-  <h1>Từ cài đặt đến giám sát 24/7</h1>
-  <p>Làm lần lượt từng bước dưới đây: cài phần mềm, kết nối camera, chạy giám sát, nhận cảnh báo qua Telegram, bật/tắt hệ thống và xử lý khi gặp sự cố.</p>
-  <p class="lang-note">This guide is available in Vietnamese only.</p>
+  <span class="hero-badge">
+    <span class="vi">📘 Hướng dẫn sử dụng</span>
+    <span class="en">📘 User Guide</span>
+  </span>
+  <h1>
+    <span class="vi">Từ cài đặt đến giám sát 24/7</span>
+    <span class="en">From Setup to 24/7 Surveillance</span>
+  </h1>
+  <p>
+    <span class="vi">Làm lần lượt từng bước dưới đây: cài phần mềm, kết nối camera, chạy giám sát, nhận cảnh báo qua Telegram, bật/tắt hệ thống và xử lý khi gặp sự cố.</span>
+    <span class="en">Follow the step-by-step instructions below: install software, connect cameras, run surveillance, receive Telegram alerts, manage startup/shutdown, and troubleshoot issues.</span>
+  </p>
 </header>
 
 <div class="layout">
-  <aside class="toc" aria-label="Mục lục">
-    <div class="toc-title">MỤC LỤC</div>
+  <aside class="toc" aria-label="Mục lục / Table of Contents">
+    <div class="toc-title">
+      <span class="vi">MỤC LỤC</span>
+      <span class="en">TABLE OF CONTENTS</span>
+    </div>
     <ol>
-      <li><a href="#chuan-bi">Chuẩn bị</a></li>
-      <li><a href="#cai-dat">Tải và cài đặt</a></li>
-      <li><a href="#khoi-dong">Khởi động lần đầu</a></li>
-      <li><a href="#giao-dien">Làm quen giao diện</a></li>
-      <li><a href="#webcam">Kết nối webcam</a></li>
-      <li><a href="#camera-ip">Kết nối camera IP</a></li>
-      <li><a href="#lap-dat">Đặt camera đúng cách</a></li>
-      <li><a href="#giam-sat">Theo dõi giám sát</a></li>
-      <li><a href="#canh-bao">Khi có cảnh báo</a></li>
-      <li><a href="#telegram">Cảnh báo qua Telegram</a></li>
-      <li><a href="#bat-tat">Bật, tạm dừng và tắt</a></li>
-      <li><a href="#tu-dong">Tự chạy cùng Windows</a></li>
-      <li><a href="#may-khac">Xem từ máy khác</a></li>
-      <li><a href="#rieng-tu">Quyền riêng tư</a></li>
-      <li><a href="#su-co">Xử lý sự cố</a></li>
-      <li><a href="#go-cai-dat">Gỡ cài đặt</a></li>
+      <li><a href="#chuan-bi"><span class="vi">Chuẩn bị</span><span class="en">Preparation</span></a></li>
+      <li><a href="#cai-dat"><span class="vi">Tải và cài đặt</span><span class="en">Download & Install</span></a></li>
+      <li><a href="#khoi-dong"><span class="vi">Khởi động lần đầu</span><span class="en">First Launch</span></a></li>
+      <li><a href="#giao-dien"><span class="vi">Làm quen giao diện</span><span class="en">Interface Overview</span></a></li>
+      <li><a href="#webcam"><span class="vi">Kết nối webcam</span><span class="en">Connect Webcam</span></a></li>
+      <li><a href="#camera-ip"><span class="vi">Kết nối camera IP</span><span class="en">Connect IP Camera</span></a></li>
+      <li><a href="#lap-dat"><span class="vi">Đặt camera đúng cách</span><span class="en">Camera Placement</span></a></li>
+      <li><a href="#giam-sat"><span class="vi">Theo dõi giám sát</span><span class="en">Live Monitoring</span></a></li>
+      <li><a href="#canh-bao"><span class="vi">Khi có cảnh báo</span><span class="en">When Alert Triggers</span></a></li>
+      <li><a href="#telegram"><span class="vi">Cảnh báo qua Telegram</span><span class="en">Telegram Notifications</span></a></li>
+      <li><a href="#bat-tat"><span class="vi">Bật, tạm dừng và tắt</span><span class="en">Start, Pause & Shutdown</span></a></li>
+      <li><a href="#tu-dong"><span class="vi">Tự chạy cùng Windows</span><span class="en">Autostart with Windows</span></a></li>
+      <li><a href="#may-khac"><span class="vi">Xem từ máy khác</span><span class="en">LAN Remote Access</span></a></li>
+      <li><a href="#rieng-tu"><span class="vi">Quyền riêng tư</span><span class="en">Privacy & Security</span></a></li>
+      <li><a href="#su-co"><span class="vi">Xử lý sự cố</span><span class="en">Troubleshooting</span></a></li>
+      <li><a href="#go-cai-dat"><span class="vi">Gỡ cài đặt</span><span class="en">Uninstallation</span></a></li>
     </ol>
   </aside>
 
@@ -253,326 +361,963 @@
 
     <!-- 1 -->
     <section class="step" id="chuan-bi">
-      <div class="step-head"><span class="step-num">1</span><h2>Chuẩn bị</h2></div>
+      <div class="step-head">
+        <span class="step-num">1</span>
+        <h2>
+          <span class="vi">Chuẩn bị</span>
+          <span class="en">Preparation</span>
+        </h2>
+      </div>
       <div class="table-wrap">
         <table>
-          <tr><th>Thành phần</th><th>Yêu cầu</th></tr>
-          <tr><td>Hệ điều hành</td><td>Windows 10 hoặc Windows 11 (64-bit)</td></tr>
-          <tr><td>Máy tính</td><td>CPU Intel Core i5 thế hệ 8 / AMD Ryzen 5 trở lên, RAM tối thiểu 8 GB (khuyến nghị 16 GB)</td></tr>
-          <tr><td>Card đồ họa</td><td>Không bắt buộc. Có card NVIDIA, AMD hoặc Intel hỗ trợ DirectX 12 thì AI chạy nhanh hơn nhiều</td></tr>
-          <tr><td>Camera</td><td>Webcam của laptop, webcam USB, hoặc camera an ninh IP có hỗ trợ RTSP (Hikvision, Dahua/Imou, Yoosee, TP-Link Tapo, EZVIZ…)</td></tr>
-          <tr><td>Ổ cứng</td><td>Khoảng 450 MB trống</td></tr>
-          <tr><td>Internet</td><td>Chỉ cần lúc tải phần mềm và khi muốn gửi cảnh báo qua Telegram. Phần nhận diện AI chạy hoàn toàn trên máy</td></tr>
+          <tr>
+            <th><span class="vi">Thành phần</span><span class="en">Component</span></th>
+            <th><span class="vi">Yêu cầu</span><span class="en">Requirement</span></th>
+          </tr>
+          <tr>
+            <td><span class="vi">Hệ điều hành</span><span class="en">Operating System</span></td>
+            <td><span class="vi">Windows 10 hoặc Windows 11 (64-bit)</span><span class="en">Windows 10 or Windows 11 (64-bit)</span></td>
+          </tr>
+          <tr>
+            <td><span class="vi">Máy tính</span><span class="en">Hardware</span></td>
+            <td>
+              <span class="vi">CPU Intel Core i5 thế hệ 8 / AMD Ryzen 5 trở lên, RAM tối thiểu 8 GB (khuyến nghị 16 GB)</span>
+              <span class="en">Intel Core i5 8th Gen / AMD Ryzen 5 or newer, minimum 8 GB RAM (16 GB recommended)</span>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="vi">Card đồ họa</span><span class="en">Graphics (GPU)</span></td>
+            <td>
+              <span class="vi">Không bắt buộc. Có card NVIDIA, AMD hoặc Intel hỗ trợ DirectX 12 thì AI chạy nhanh hơn nhiều</span>
+              <span class="en">Optional. NVIDIA, AMD, or Intel GPU with DirectX 12 support significantly accelerates AI inference</span>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="vi">Camera</span><span class="en">Camera</span></td>
+            <td>
+              <span class="vi">Webcam của laptop, webcam USB, hoặc camera an ninh IP có hỗ trợ RTSP (Hikvision, Dahua/Imou, Yoosee, TP-Link Tapo, EZVIZ…)</span>
+              <span class="en">Laptop built-in webcam, USB webcam, or RTSP IP security camera (Hikvision, Dahua/Imou, Yoosee, TP-Link Tapo, EZVIZ, etc.)</span>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="vi">Ổ cứng</span><span class="en">Disk Space</span></td>
+            <td><span class="vi">Khoảng 450 MB trống</span><span class="en">~450 MB free disk space</span></td>
+          </tr>
+          <tr>
+            <td><span class="vi">Internet</span><span class="en">Internet Connection</span></td>
+            <td>
+              <span class="vi">Chỉ cần lúc tải phần mềm và khi muốn gửi cảnh báo qua Telegram. Phần nhận diện AI chạy hoàn toàn trên máy</span>
+              <span class="en">Only required to download the software and send Telegram notifications. AI inference runs 100% locally on-device</span>
+            </td>
+          </tr>
         </table>
       </div>
-      <div class="callout tip"><span class="ico">💡</span><div>Nên để máy tính giám sát <b>luôn cắm sạc</b> và tắt chế độ ngủ (Sleep) trong <i>Settings → System → Power</i>. Laptop chạy pin sẽ bị giới hạn hiệu năng card đồ họa, làm AI chậm hơn.</div></div>
+      <div class="callout tip">
+        <span class="ico">💡</span>
+        <div>
+          <span class="vi">Nên để máy tính giám sát <b>luôn cắm sạc</b> và tắt chế độ ngủ (Sleep) trong <i>Settings → System → Power</i>. Laptop chạy pin sẽ bị giới hạn hiệu năng card đồ họa, làm AI chậm hơn.</span>
+          <span class="en">Keep the host computer <b>always plugged in</b> and disable Sleep mode in <i>Windows Settings → System → Power</i>. Battery mode throttles GPU performance and slows down AI.</span>
+        </div>
+      </div>
     </section>
 
     <!-- 2 -->
     <section class="step" id="cai-dat">
-      <div class="step-head"><span class="step-num">2</span><h2>Tải và cài đặt</h2></div>
+      <div class="step-head">
+        <span class="step-num">2</span>
+        <h2>
+          <span class="vi">Tải và cài đặt</span>
+          <span class="en">Download & Install</span>
+        </h2>
+      </div>
       <ol class="steps">
-        <li>Bấm nút <span class="ui">Tải về</span> ở góc trên trang để tải tệp <code>Fall_and_Stroke_Warning_System_Setup.exe</code>.</li>
-        <li>Mở thư mục <b>Downloads</b> và nhấp đúp vào tệp vừa tải.</li>
-        <li>Nếu Windows hiện màn hình xanh <b>“Windows protected your PC”</b>: bấm <span class="ui">More info</span> (Thông tin thêm) rồi bấm <span class="ui">Run anyway</span> (Vẫn chạy).</li>
-        <li>Chọn ngôn ngữ cho trình cài đặt (Tiếng Việt hoặc English).</li>
-        <li>Ở bước chọn tác vụ bổ sung:
+        <li>
+          <span class="vi">Bấm nút <span class="ui">Tải về</span> ở góc trên trang để tải tệp <code>Fall_and_Stroke_Warning_System_Setup.exe</code>.</span>
+          <span class="en">Click the <span class="ui">Download</span> button in the top navigation to download <code>Fall_and_Stroke_Warning_System_Setup.exe</code>.</span>
+        </li>
+        <li>
+          <span class="vi">Mở thư mục <b>Downloads</b> và nhấp đúp vào tệp vừa tải.</span>
+          <span class="en">Open your <b>Downloads</b> folder and double-click the installer file.</span>
+        </li>
+        <li>
+          <span class="vi">Nếu Windows hiện màn hình xanh <b>“Windows protected your PC”</b>: bấm <span class="ui">More info</span> (Thông tin thêm) rồi bấm <span class="ui">Run anyway</span> (Vẫn chạy).</span>
+          <span class="en">If Windows displays <b>"Windows protected your PC"</b>: click <span class="ui">More info</span> then click <span class="ui">Run anyway</span>.</span>
+        </li>
+        <li>
+          <span class="vi">Chọn ngôn ngữ cho trình cài đặt (Tiếng Việt hoặc English).</span>
+          <span class="en">Choose your installer language (Tiếng Việt or English).</span>
+        </li>
+        <li>
+          <span class="vi">Ở bước chọn tác vụ bổ sung:</span>
+          <span class="en">In the additional tasks step:</span>
           <ul>
-            <li>Tích <b>Tạo biểu tượng trên Màn hình chính (Desktop)</b> để mở ứng dụng nhanh.</li>
-            <li>Tích <b>Tự động chạy bảo vệ khi khởi động Windows</b> nếu máy này dùng để giám sát 24/7 (có thể bật/tắt lại sau trong phần Cài đặt).</li>
+            <li>
+              <span class="vi">Tích <b>Tạo biểu tượng trên Màn hình chính (Desktop)</b> để mở ứng dụng nhanh.</span>
+              <span class="en">Check <b>Create a desktop shortcut</b> for quick access.</span>
+            </li>
+            <li>
+              <span class="vi">Tích <b>Tự động chạy bảo vệ khi khởi động Windows</b> nếu máy này dùng để giám sát 24/7 (có thể bật/tắt lại sau trong phần Cài đặt).</span>
+              <span class="en">Check <b>Autostart protection when Windows boots</b> for continuous 24/7 surveillance (can also be toggled in Settings later).</span>
+            </li>
           </ul>
         </li>
-        <li>Bấm <span class="ui">Install</span> và chờ khoảng 1 phút.</li>
-        <li>Ở màn hình cuối, giữ dấu tích <b>Mở Fall and Stroke Warning System ngay</b> rồi bấm <span class="ui">Finish</span>.</li>
+        <li>
+          <span class="vi">Bấm <span class="ui">Install</span> và chờ khoảng 1 phút.</span>
+          <span class="en">Click <span class="ui">Install</span> and wait about 1 minute.</span>
+        </li>
+        <li>
+          <span class="vi">Ở màn hình cuối, giữ dấu tích <b>Mở Fall and Stroke Warning System ngay</b> rồi bấm <span class="ui">Finish</span>.</span>
+          <span class="en">On the final screen, keep <b>Launch Fall and Stroke Warning System</b> checked and click <span class="ui">Finish</span>.</span>
+        </li>
       </ol>
-      <div class="callout info"><span class="ico">ℹ️</span><div>Phần mềm cài vào <code>%LOCALAPPDATA%\Programs\Fall_and_Stroke_Warning_System</code>, không cần quyền quản trị. Bạn <b>không</b> cần cài Python hay bất kỳ phần mềm nào khác.</div></div>
+      <div class="callout info">
+        <span class="ico">ℹ️</span>
+        <div>
+          <span class="vi">Phần mềm cài vào <code>%LOCALAPPDATA%\Programs\Fall_and_Stroke_Warning_System</code>, không cần quyền quản trị. Bạn <b>không</b> cần cài Python hay bất kỳ phần mềm nào khác.</span>
+          <span class="en">The software installs to <code>%LOCALAPPDATA%\Programs\Fall_and_Stroke_Warning_System</code> without requiring administrative rights. You do <b>not</b> need to install Python or any extra dependencies.</span>
+        </div>
+      </div>
       <details>
-        <summary>Vì sao Windows hiện cảnh báo khi cài?</summary>
-        <p>Phần mềm mã nguồn mở này chưa có chữ ký số doanh nghiệp, nên Windows SmartScreen cảnh báo với mọi tệp tải từ Internet chưa đủ “uy tín”. Đây không phải dấu hiệu virus. Nếu máy dùng <b>Smart App Control</b> (Windows 11 cài mới) và không có nút <i>Run anyway</i>, xem mục <a href="#su-co">Xử lý sự cố</a>.</p>
+        <summary>
+          <span class="vi">Vì sao Windows hiện cảnh báo khi cài?</span>
+          <span class="en">Why does Windows show a security warning during install?</span>
+        </summary>
+        <p>
+          <span class="vi">Phần mềm mã nguồn mở này chưa có chữ ký số doanh nghiệp, nên Windows SmartScreen cảnh báo với mọi tệp tải từ Internet chưa đủ “uy tín”. Đây không phải dấu hiệu virus. Nếu máy dùng <b>Smart App Control</b> (Windows 11 cài mới) và không có nút <i>Run anyway</i>, xem mục <a href="#su-co">Xử lý sự cố</a>.</span>
+          <span class="en">This open-source software is independently built without expensive enterprise code-signing certificates, so Windows SmartScreen displays a precautionary note for newly downloaded files. This is not a virus. If your system runs <b>Smart App Control</b> (clean Windows 11 installs) and lacks a <i>Run anyway</i> button, see the <a href="#su-co">Troubleshooting</a> section.</span>
+        </p>
       </details>
     </section>
 
     <!-- 3 -->
     <section class="step" id="khoi-dong">
-      <div class="step-head"><span class="step-num">3</span><h2>Khởi động lần đầu</h2></div>
+      <div class="step-head">
+        <span class="step-num">3</span>
+        <h2>
+          <span class="vi">Khởi động lần đầu</span>
+          <span class="en">First Launch</span>
+        </h2>
+      </div>
       <ol class="steps">
-        <li>Nhấp đúp biểu tượng <b>Fall and Stroke Warning System</b> trên Desktop (hoặc tìm trong menu Start).</li>
-        <li>Chờ <b>10–30 giây</b> để hệ thống nạp mô hình AI. Ứng dụng chạy ngầm nên <b>không</b> có cửa sổ đen hiện ra, đây là bình thường.</li>
-        <li>Cửa sổ giao diện tự mở. Nếu sau 1 phút vẫn không thấy, mở trình duyệt và vào <code>http://localhost:8000</code>.</li>
-        <li>Nếu Windows hỏi <b>cho phép truy cập mạng</b> (Windows Defender Firewall): bấm <span class="ui">Allow</span>. Cần bước này nếu muốn xem từ điện thoại hoặc máy khác.</li>
-        <li>Nếu Windows hỏi <b>quyền dùng camera</b>: bấm <span class="ui">Yes / Cho phép</span>.</li>
+        <li>
+          <span class="vi">Nhấp đúp biểu tượng <b>Fall and Stroke Warning System</b> trên Desktop (hoặc tìm trong menu Start).</span>
+          <span class="en">Double-click the <b>Fall and Stroke Warning System</b> shortcut on Desktop (or launch from Start menu).</span>
+        </li>
+        <li>
+          <span class="vi">Chờ <b>10–30 giây</b> để hệ thống nạp mô hình AI. Ứng dụng chạy ngầm nên <b>không</b> có cửa sổ đen hiện ra, đây là bình thường.</span>
+          <span class="en">Wait <b>10–30 seconds</b> for AI models to initialize in memory. The process runs quietly in the background with <b>no</b> command prompt popups.</span>
+        </li>
+        <li>
+          <span class="vi">Cửa sổ giao diện tự mở. Nếu sau 1 phút vẫn không thấy, mở trình duyệt và vào <code>http://localhost:8000</code>.</span>
+          <span class="en">The dashboard window opens automatically. If not shown after 1 minute, open any browser and visit <code>http://localhost:8000</code>.</span>
+        </li>
+        <li>
+          <span class="vi">Nếu Windows hỏi <b>cho phép truy cập mạng</b> (Windows Defender Firewall): bấm <span class="ui">Allow</span>. Cần bước này nếu muốn xem từ điện thoại hoặc máy khác.</span>
+          <span class="en">If Windows prompts for <b>network access permissions</b> (Windows Defender Firewall): click <span class="ui">Allow</span>. This enables viewing from phones or other local devices.</span>
+        </li>
+        <li>
+          <span class="vi">Nếu Windows hỏi <b>quyền dùng camera</b>: bấm <span class="ui">Yes / Cho phép</span>.</span>
+          <span class="en">If Windows asks for <b>camera access permission</b>: click <span class="ui">Yes / Allow</span>.</span>
+        </li>
       </ol>
-      <div class="callout tip"><span class="ico">✅</span><div>Ứng dụng tự bật <b>Webcam 0</b> (webcam mặc định của máy). Nếu thấy hình ảnh trực tiếp trong khung <b>CAMERA 01</b> là hệ thống đã sẵn sàng.</div></div>
+      <div class="callout tip">
+        <span class="ico">✅</span>
+        <div>
+          <span class="vi">Ứng dụng tự bật <b>Webcam 0</b> (webcam mặc định của máy). Nếu thấy hình ảnh trực tiếp trong khung <b>CAMERA 01</b> là hệ thống đã sẵn sàng.</span>
+          <span class="en">The app automatically starts <b>Webcam 0</b> (default camera). When live video is displayed in the <b>CAMERA 01</b> feed, the system is fully operational.</span>
+        </div>
+      </div>
     </section>
 
     <!-- 4 -->
     <section class="step" id="giao-dien">
-      <div class="step-head"><span class="step-num">4</span><h2>Làm quen giao diện</h2></div>
-      <p>Thanh bên trái gồm các mục:</p>
+      <div class="step-head">
+        <span class="step-num">4</span>
+        <h2>
+          <span class="vi">Làm quen giao diện</span>
+          <span class="en">Interface Overview</span>
+        </h2>
+      </div>
+      <p>
+        <span class="vi">Thanh bên trái gồm các mục:</span>
+        <span class="en">The left navigation bar includes the following sections:</span>
+      </p>
       <div class="table-wrap">
         <table>
-          <tr><th>Mục</th><th>Chức năng</th></tr>
-          <tr><td>🏠 Tổng quan</td><td>Màn hình chính: video trực tiếp, cảnh báo mới nhất, thống kê nhanh</td></tr>
-          <tr><td>📹 Video trực tiếp</td><td>Khung camera lớn với khung xương người và trạng thái nguy cơ</td></tr>
-          <tr><td>🕒 Lịch sử cảnh báo</td><td>Danh sách các lần phát hiện bất thường kèm thời gian và ảnh chụp</td></tr>
-          <tr><td>📊 Thống kê</td><td>Số người đang theo dõi, tốc độ khung hình (FPS), tình trạng hệ thống</td></tr>
-          <tr><td>⚙️ Cài đặt</td><td>Tự chạy cùng Windows, kiểm tra camera, làm mờ mặt, Telegram, tắt hệ thống</td></tr>
+          <tr>
+            <th><span class="vi">Mục</span><span class="en">Section</span></th>
+            <th><span class="vi">Chức năng</span><span class="en">Function</span></th>
+          </tr>
+          <tr>
+            <td><span class="vi">🏠 Tổng quan</span><span class="en">🏠 Overview</span></td>
+            <td><span class="vi">Màn hình chính: video trực tiếp, cảnh báo mới nhất, thống kê nhanh</span><span class="en">Main dashboard: live video feed, latest incident alert card, system summary</span></td>
+          </tr>
+          <tr>
+            <td><span class="vi">📹 Video trực tiếp</span><span class="en">📹 Live Stream</span></td>
+            <td><span class="vi">Khung camera lớn với khung xương người và trạng thái nguy cơ</span><span class="en">Full-size camera feed with real-time 17-keypoint skeleton and risk classification</span></td>
+          </tr>
+          <tr>
+            <td><span class="vi">🕒 Lịch sử cảnh báo</span><span class="en">🕒 Alert History</span></td>
+            <td><span class="vi">Danh sách các lần phát hiện bất thường kèm thời gian và ảnh chụp</span><span class="en">Chronological log of detected incidents with timestamps and snapshot previews</span></td>
+          </tr>
+          <tr>
+            <td><span class="vi">📊 Thống kê</span><span class="en">📊 Statistics</span></td>
+            <td><span class="vi">Số người đang theo dõi, tốc độ khung hình (FPS), tình trạng hệ thống</span><span class="en">Tracked person count, inference frame rate (FPS), and hardware telemetry</span></td>
+          </tr>
+          <tr>
+            <td><span class="vi">⚙️ Cài đặt</span><span class="en">⚙️ Settings</span></td>
+            <td><span class="vi">Tự chạy cùng Windows, kiểm tra camera, làm mờ mặt, Telegram, tắt hệ thống</span><span class="en">Windows autostart, camera diagnostic, privacy face blur, Telegram setup, clean shutdown</span></td>
+          </tr>
         </table>
       </div>
-      <p>Trên khung camera có nút <span class="ui">•••</span> (Tùy chọn Camera &amp; Thiết bị). Mọi thao tác đổi nguồn camera, chụp ảnh, toàn màn hình, dừng/bật luồng đều nằm ở đây.</p>
+      <p>
+        <span class="vi">Trên khung camera có nút <span class="ui">•••</span> (Tùy chọn Camera &amp; Thiết bị). Mọi thao tác đổi nguồn camera, chụp ảnh, toàn màn hình, dừng/bật luồng đều nằm ở đây.</span>
+        <span class="en">The camera card features a <span class="ui">•••</span> button (Camera &amp; Device Options). Switching video sources, taking snapshots, toggling fullscreen, and pausing/resuming streams are all located here.</span>
+      </p>
     </section>
 
     <!-- 5 -->
     <section class="step" id="webcam">
-      <div class="step-head"><span class="step-num">5</span><h2>Kết nối webcam (tích hợp hoặc USB)</h2></div>
+      <div class="step-head">
+        <span class="step-num">5</span>
+        <h2>
+          <span class="vi">Kết nối webcam (tích hợp hoặc USB)</span>
+          <span class="en">Connecting Webcams (Built-in or USB)</span>
+        </h2>
+      </div>
       <ol class="steps">
-        <li>Cắm webcam USB vào máy (bỏ qua nếu dùng webcam của laptop).</li>
-        <li>Trên khung camera, bấm <span class="ui">•••</span>, tìm phần <b>CẤU HÌNH NGUỒN CAMERA</b>.</li>
-        <li>Ở <b>Loại Nguồn</b>, chọn <span class="ui">📷 Webcam Tích hợp / USB</span>.</li>
-        <li>Bấm <span class="ui">Quét</span> để tìm các webcam đang cắm, rồi chọn webcam trong ô <b>Chọn Webcam</b>. Webcam 0 thường là webcam laptop, webcam USB thường là Webcam 1.</li>
-        <li>Bấm <span class="ui">ÁP DỤNG CAMERA</span> và chờ vài giây để hình hiện lên.</li>
-        <li>Bấm <span class="ui">LƯU MẶC ĐỊNH</span> để lần sau mở ứng dụng sẽ tự dùng camera này.</li>
+        <li>
+          <span class="vi">Cắm webcam USB vào máy (bỏ qua nếu dùng webcam của laptop).</span>
+          <span class="en">Plug your USB webcam into the computer (skip if using laptop built-in webcam).</span>
+        </li>
+        <li>
+          <span class="vi">Trên khung camera, bấm <span class="ui">•••</span>, tìm phần <b>CẤU HÌNH NGUỒN CAMERA</b>.</span>
+          <span class="en">On the camera feed card, click <span class="ui">•••</span> and locate <b>CAMERA SOURCE CONFIG</b>.</span>
+        </li>
+        <li>
+          <span class="vi">Ở <b>Loại Nguồn</b>, chọn <span class="ui">📷 Webcam Tích hợp / USB</span>.</span>
+          <span class="en">Under <b>Source Type</b>, select <span class="ui">📷 Integrated / USB Webcam</span>.</span>
+        </li>
+        <li>
+          <span class="vi">Bấm <span class="ui">Quét</span> để tìm các webcam đang cắm, rồi chọn webcam trong ô <b>Chọn Webcam</b>. Webcam 0 thường là webcam laptop, webcam USB thường là Webcam 1.</span>
+          <span class="en">Click <span class="ui">Scan</span> to detect connected devices, then select your webcam in the <b>Select Webcam</b> dropdown (Webcam 0 is usually internal, Webcam 1 is external USB).</span>
+        </li>
+        <li>
+          <span class="vi">Bấm <span class="ui">ÁP DỤNG CAMERA</span> và chờ vài giây để hình hiện lên.</span>
+          <span class="en">Click <span class="ui">APPLY CAMERA</span> and wait a few seconds for video feed to stream.</span>
+        </li>
+        <li>
+          <span class="vi">Bấm <span class="ui">LƯU MẶC ĐỊNH</span> để lần sau mở ứng dụng sẽ tự dùng camera này.</span>
+          <span class="en">Click <span class="ui">SAVE AS DEFAULT</span> so the system automatically uses this camera on subsequent launches.</span>
+        </li>
       </ol>
-      <div class="callout warn"><span class="ico">⚠️</span><div>Mỗi webcam chỉ một chương trình dùng được tại một thời điểm. Hãy tắt Zoom, Teams, Zalo gọi video, ứng dụng Camera của Windows… trước khi kết nối.</div></div>
+      <div class="callout warn">
+        <span class="ico">⚠️</span>
+        <div>
+          <span class="vi">Mỗi webcam chỉ một chương trình dùng được tại một thời điểm. Hãy tắt Zoom, Teams, Zalo gọi video, ứng dụng Camera của Windows… trước khi kết nối.</span>
+          <span class="en">Each physical webcam can only be opened by one app at a time. Please close Zoom, Microsoft Teams, Skype, Windows Camera, etc. before connecting.</span>
+        </div>
+      </div>
     </section>
 
     <!-- 6 -->
     <section class="step" id="camera-ip">
-      <div class="step-head"><span class="step-num">6</span><h2>Kết nối camera IP an ninh (RTSP)</h2></div>
-      <p>Camera IP gắn tường, gắn trần cho góc nhìn bao quát hơn webcam. Máy tính và camera phải <b>cùng mạng Wi-Fi / mạng nội bộ</b>.</p>
+      <div class="step-head">
+        <span class="step-num">6</span>
+        <h2>
+          <span class="vi">Kết nối camera IP an ninh (RTSP)</span>
+          <span class="en">Connecting IP Security Cameras (RTSP)</span>
+        </h2>
+      </div>
+      <p>
+        <span class="vi">Camera IP gắn tường, gắn trần cho góc nhìn bao quát hơn webcam. Máy tính và camera phải <b>cùng mạng Wi-Fi / mạng nội bộ</b>.</span>
+        <span class="en">Wall- or ceiling-mounted IP cameras provide a much wider angle than a laptop webcam. The computer and camera must be on the <b>same Wi-Fi / local network</b>.</span>
+      </p>
 
-      <h3>Bước A — Lấy thông tin camera</h3>
+      <h3>
+        <span class="vi">Bước A — Lấy thông tin camera</span>
+        <span class="en">Step A — Gather Camera Credentials</span>
+      </h3>
       <ul>
-        <li><b>Địa chỉ IP</b> của camera: xem trong ứng dụng điện thoại của hãng (mục thông tin thiết bị) hoặc trong trang quản trị modem/router (danh sách thiết bị đã kết nối). Ví dụ: <code>192.168.1.100</code>.</li>
-        <li><b>Tên đăng nhập và mật khẩu</b> của camera (không phải mật khẩu tài khoản app).</li>
-        <li>Đảm bảo <b>RTSP / ONVIF đã được bật</b> trong cài đặt camera.</li>
+        <li>
+          <span class="vi"><b>Địa chỉ IP</b> của camera: xem trong ứng dụng điện thoại của hãng (mục thông tin thiết bị) hoặc trong trang quản trị modem/router (danh sách thiết bị đã kết nối). Ví dụ: <code>192.168.1.100</code>.</span>
+          <span class="en"><b>Camera IP Address</b>: check in the manufacturer mobile app (device info section) or in your router admin portal (connected clients list), e.g. <code>192.168.1.100</code>.</span>
+        </li>
+        <li>
+          <span class="vi"><b>Tên đăng nhập và mật khẩu</b> của camera (không phải mật khẩu tài khoản app).</span>
+          <span class="en"><b>Camera hardware username and password</b> (not your cloud mobile app account password).</span>
+        </li>
+        <li>
+          <span class="vi">Đảm bảo <b>RTSP / ONVIF đã được bật</b> trong cài đặt camera.</span>
+          <span class="en">Ensure <b>RTSP / ONVIF protocol is enabled</b> in the camera device settings.</span>
+        </li>
       </ul>
 
-      <h3>Bước B — Nhập vào ứng dụng</h3>
+      <h3>
+        <span class="vi">Bước B — Nhập vào ứng dụng</span>
+        <span class="en">Step B — Configure in the Application</span>
+      </h3>
       <ol class="steps">
-        <li>Bấm <span class="ui">•••</span> trên khung camera.</li>
-        <li><b>Loại Nguồn</b>: chọn <span class="ui">🌐 Camera IP An Ninh (RTSP)</span>.</li>
-        <li><b>Hãng Camera</b>: chọn đúng hãng. Ô <b>Đường dẫn RTSP Stream</b> sẽ tự điền mẫu.</li>
-        <li>Sửa đường dẫn: thay tên đăng nhập, mật khẩu và địa chỉ IP bằng thông tin thật của camera.</li>
-        <li>Bấm <span class="ui">ÁP DỤNG CAMERA</span>. Có hình là kết nối thành công, sau đó bấm <span class="ui">LƯU MẶC ĐỊNH</span>.</li>
+        <li>
+          <span class="vi">Bấm <span class="ui">•••</span> trên khung camera.</span>
+          <span class="en">Click <span class="ui">•••</span> on the camera feed card.</span>
+        </li>
+        <li>
+          <span class="vi"><b>Loại Nguồn</b>: chọn <span class="ui">🌐 Camera IP / Camera ở xa (RTSP, HTTP, RTMP)</span>.</span>
+          <span class="en"><b>Source Type</b>: select <span class="ui">🌐 IP Camera / Remote Camera (RTSP, HTTP, RTMP)</span>.</span>
+        </li>
+        <li>
+          <span class="vi"><b>Hãng Camera</b>: chọn đúng hãng. Ô <b>Đường dẫn camera</b> sẽ tự điền mẫu.</span>
+          <span class="en"><b>Camera Brand</b>: select your camera maker. The URL field will autofill an RTSP template.</span>
+        </li>
+        <li>
+          <span class="vi">Sửa đường dẫn: thay tên đăng nhập, mật khẩu và địa chỉ IP bằng thông tin thật của camera.</span>
+          <span class="en">Customize the path: substitute with your camera's real username, password, and local IP.</span>
+        </li>
+        <li>
+          <span class="vi">Bấm <span class="ui">ÁP DỤNG CAMERA</span>. Có hình là kết nối thành công, sau đó bấm <span class="ui">LƯU MẶC ĐỊNH</span>.</span>
+          <span class="en">Click <span class="ui">APPLY CAMERA</span>. Once video appears, click <span class="ui">SAVE AS DEFAULT</span>.</span>
+        </li>
       </ol>
 
-      <h3>Mẫu đường dẫn theo hãng</h3>
+      <h3>
+        <span class="vi">Mẫu đường dẫn theo hãng</span>
+        <span class="en">RTSP URL Templates by Brand</span>
+      </h3>
       <div class="table-wrap">
         <table>
-          <tr><th>Hãng</th><th>Đường dẫn mẫu</th><th>Ghi chú</th></tr>
-          <tr><td>Hikvision</td><td><code>rtsp://admin:MATKHAU@192.168.1.100:554/Streaming/Channels/101</code></td><td>101 = luồng chính, 102 = luồng phụ (nhẹ hơn)</td></tr>
-          <tr><td>Dahua / Imou</td><td><code>rtsp://admin:MATKHAU@192.168.1.100:554/cam/realmonitor?channel=1&amp;subtype=0</code></td><td>subtype=1 là luồng phụ</td></tr>
-          <tr><td>Yoosee</td><td><code>rtsp://admin:MATKHAU@192.168.1.100:554/onvif1</code></td><td>Mật khẩu là mật khẩu thiết bị đặt trong app Yoosee</td></tr>
-          <tr><td>TP-Link Tapo</td><td><code>rtsp://TAIKHOAN:MATKHAU@192.168.1.100:554/stream1</code></td><td>Tạo “Tài khoản camera” trong app Tapo: Cài đặt nâng cao → Tài khoản camera. stream2 là luồng phụ</td></tr>
-          <tr><td>EZVIZ</td><td><code>rtsp://admin:MAXACMINH@192.168.1.100:554/h264/ch1/main/av_stream</code></td><td>Mật khẩu là mã xác minh 6 chữ in hoa trên tem dán dưới camera</td></tr>
+          <tr>
+            <th><span class="vi">Hãng</span><span class="en">Brand</span></th>
+            <th><span class="vi">Đường dẫn mẫu</span><span class="en">Template RTSP Stream URL</span></th>
+            <th><span class="vi">Ghi chú</span><span class="en">Notes</span></th>
+          </tr>
+          <tr>
+            <td>Hikvision</td>
+            <td><code>rtsp://admin:MATKHAU@192.168.1.100:554/Streaming/Channels/101</code></td>
+            <td><span class="vi">101 = luồng chính, 102 = luồng phụ (nhẹ hơn)</span><span class="en">101 = main stream, 102 = sub-stream (lighter CPU usage)</span></td>
+          </tr>
+          <tr>
+            <td>Dahua / Imou</td>
+            <td><code>rtsp://admin:MATKHAU@192.168.1.100:554/cam/realmonitor?channel=1&amp;subtype=0</code></td>
+            <td><span class="vi">subtype=1 là luồng phụ</span><span class="en">subtype=1 is the sub-stream</span></td>
+          </tr>
+          <tr>
+            <td>Yoosee</td>
+            <td><code>rtsp://admin:MATKHAU@192.168.1.100:554/onvif1</code></td>
+            <td><span class="vi">Mật khẩu là mật khẩu thiết bị đặt trong app Yoosee</span><span class="en">Password is device password configured in Yoosee app</span></td>
+          </tr>
+          <tr>
+            <td>TP-Link Tapo</td>
+            <td><code>rtsp://TAIKHOAN:MATKHAU@192.168.1.100:554/stream1</code></td>
+            <td><span class="vi">Tạo “Tài khoản camera” trong app Tapo: Cài đặt nâng cao → Tài khoản camera. stream2 là luồng phụ</span><span class="en">Create "Camera Account" in Tapo app: Advanced Settings → Camera Account. stream2 is sub-stream</span></td>
+          </tr>
+          <tr>
+            <td>EZVIZ</td>
+            <td><code>rtsp://admin:MAXACMINH@192.168.1.100:554/h264/ch1/main/av_stream</code></td>
+            <td><span class="vi">Mật khẩu là mã xác minh 6 chữ in hoa trên tem dán dưới camera</span><span class="en">Password is the 6-capital-letter verification code printed on bottom sticker</span></td>
+          </tr>
         </table>
       </div>
-      <div class="callout tip"><span class="ico">💡</span><div>Nếu mật khẩu có ký tự đặc biệt như <code>@ # : /</code>, hãy đổi mật khẩu camera sang chỉ gồm chữ và số để tránh lỗi đường dẫn.</div></div>
+      <div class="callout tip">
+        <span class="ico">💡</span>
+        <div>
+          <span class="vi">Nếu mật khẩu có ký tự đặc biệt như <code>@ # : /</code>, hãy nhập tài khoản và mật khẩu vào các ô riêng biệt bên dưới hoặc đổi mật khẩu camera sang chỉ gồm chữ và số để tránh lỗi đường dẫn.</span>
+          <span class="en">If your password contains special characters like <code>@ # : /</code>, enter username and password into the dedicated fields below, or switch your camera password to alphanumeric characters to avoid URL syntax errors.</span>
+        </div>
+      </div>
 
-      <h3>Thử bằng video mẫu (không cần camera)</h3>
-      <p>Chọn <b>Loại Nguồn</b> là <span class="ui">🎬 Tệp Video Kiểm Thử (MP4)</span> để chạy thử hệ thống bằng một tệp video có sẵn trên máy.</p>
+      <h3>
+        <span class="vi">Thử bằng video mẫu (không cần camera)</span>
+        <span class="en">Testing with Sample Video (No Camera Needed)</span>
+      </h3>
+      <p>
+        <span class="vi">Chọn <b>Loại Nguồn</b> là <span class="ui">🎬 Tệp Video Kiểm Thử (MP4)</span> để chạy thử hệ thống bằng một tệp video có sẵn trên máy.</span>
+        <span class="en">Select <b>Source Type</b> as <span class="ui">🎬 Test Video File (MP4)</span> to evaluate the system using simulation video files included in the project.</span>
+      </p>
     </section>
 
     <!-- 7 -->
     <section class="step" id="lap-dat">
-      <div class="step-head"><span class="step-num">7</span><h2>Đặt camera đúng cách để AI nhận diện chính xác</h2></div>
-      <div class="grid-2">
-        <div class="mini-card"><h4>📐 Độ cao 2–2,5 m, chếch xuống</h4><p>Nhìn bao quát cả sàn nhà, vì người ngã sẽ nằm trên sàn.</p></div>
-        <div class="mini-card"><h4>🧍 Thấy được toàn thân</h4><p>Khung hình nên chứa trọn người từ đầu đến chân ở khu vực hay đi lại.</p></div>
-        <div class="mini-card"><h4>💡 Đủ sáng, không ngược sáng</h4><p>Tránh hướng camera thẳng vào cửa sổ. Ban đêm dùng camera có hồng ngoại hoặc để đèn ngủ.</p></div>
-        <div class="mini-card"><h4>🚧 Ít vật che khuất</h4><p>Hạn chế bàn ghế, lan can che phần thân dưới. Mỗi phòng cần giám sát nên có một camera riêng.</p></div>
+      <div class="step-head">
+        <span class="step-num">7</span>
+        <h2>
+          <span class="vi">Đặt camera đúng cách để AI nhận diện chính xác</span>
+          <span class="en">Optimal Camera Placement for Accurate AI Detection</span>
+        </h2>
       </div>
-      <p>Ưu tiên các khu vực dễ xảy ra ngã: phòng ngủ, lối đi tới nhà vệ sinh, phòng khách, cầu thang.</p>
+      <div class="grid-2">
+        <div class="mini-card">
+          <h4>
+            <span class="vi">📐 Độ cao 2–2,5 m, chếch xuống</span>
+            <span class="en">📐 Height 2–2.5 m, tilted downward</span>
+          </h4>
+          <p>
+            <span class="vi">Nhìn bao quát cả sàn nhà, vì người ngã sẽ nằm trên sàn.</span>
+            <span class="en">Provides wide coverage of the floor where fallen individuals land.</span>
+          </p>
+        </div>
+        <div class="mini-card">
+          <h4>
+            <span class="vi">🧍 Thấy được toàn thân</span>
+            <span class="en">🧍 Full-body visibility</span>
+          </h4>
+          <p>
+            <span class="vi">Khung hình nên chứa trọn người từ đầu đến chân ở khu vực hay đi lại.</span>
+            <span class="en">Frame should capture the person from head to toe in common walking areas.</span>
+          </p>
+        </div>
+        <div class="mini-card">
+          <h4>
+            <span class="vi">💡 Đủ sáng, không ngược sáng</span>
+            <span class="en">💡 Adequate lighting, avoid backlight</span>
+          </h4>
+          <p>
+            <span class="vi">Tránh hướng camera thẳng vào cửa sổ. Ban đêm dùng camera có hồng ngoại hoặc để đèn ngủ.</span>
+            <span class="en">Avoid pointing camera into bright windows. At night, use infrared night vision or soft night lights.</span>
+          </p>
+        </div>
+        <div class="mini-card">
+          <h4>
+            <span class="vi">🚧 Ít vật che khuất</span>
+            <span class="en">🚧 Minimal occlusions</span>
+          </h4>
+          <p>
+            <span class="vi">Hạn chế bàn ghế, lan can che phần thân dưới. Mỗi phòng cần giám sát nên có một camera riêng.</span>
+            <span class="en">Keep lower body visible without tables or railings blocking legs. Use dedicated cameras per room.</span>
+          </p>
+        </div>
+      </div>
+      <p>
+        <span class="vi">Ưu tiên các khu vực dễ xảy ra ngã: phòng ngủ, lối đi tới nhà vệ sinh, phòng khách, cầu thang.</span>
+        <span class="en">Prioritize areas with high fall probability: bedrooms, pathways to bathrooms, living rooms, and stairs.</span>
+      </p>
     </section>
 
     <!-- 8 -->
     <section class="step" id="giam-sat">
-      <div class="step-head"><span class="step-num">8</span><h2>Theo dõi giám sát</h2></div>
-      <p>Khi đang chạy, mỗi người trong khung hình được vẽ <b>khung xương</b> và một <b>thẻ trạng thái</b>. Màu cho biết mức nguy cơ:</p>
+      <div class="step-head">
+        <span class="step-num">8</span>
+        <h2>
+          <span class="vi">Theo dõi giám sát</span>
+          <span class="en">Live Monitoring & Risk States</span>
+        </h2>
+      </div>
+      <p>
+        <span class="vi">Khi đang chạy, mỗi người trong khung hình được vẽ <b>khung xương</b> và một <b>thẻ trạng thái</b>. Màu cho biết mức nguy cơ:</span>
+        <span class="en">During monitoring, each person in view receives an overlaid <b>17-keypoint skeleton</b> and a <b>status badge</b>. Colors indicate real-time risk level:</span>
+      </p>
       <div class="table-wrap">
         <table>
-          <tr><th>Màu</th><th>Trạng thái</th><th>Ý nghĩa</th></tr>
-          <tr><td><span class="state-dot" style="background:#00c800"></span>Xanh lá</td><td>NORMAL</td><td>Sinh hoạt bình thường: đi, đứng, ngồi, cúi nhặt đồ</td></tr>
-          <tr><td><span class="state-dot" style="background:#ffd700"></span>Vàng</td><td>SUSPICIOUS</td><td>Có dấu hiệu cần chú ý (loạng choạng, tư thế lạ)</td></tr>
-          <tr><td><span class="state-dot" style="background:#ff8c00"></span>Cam</td><td>ABNORMAL</td><td>Nghi ngã hoặc biểu hiện bất thường kéo dài</td></tr>
-          <tr><td><span class="state-dot" style="background:#f00000"></span>Đỏ</td><td>HIGH RISK / ALERT</td><td>Nguy cơ cao, hệ thống phát cảnh báo; khung video có viền đỏ</td></tr>
+          <tr>
+            <th><span class="vi">Màu</span><span class="en">Color</span></th>
+            <th><span class="vi">Trạng thái</span><span class="en">Risk State</span></th>
+            <th><span class="vi">Ý nghĩa</span><span class="en">Meaning</span></th>
+          </tr>
+          <tr>
+            <td><span class="state-dot" style="background:#00c800"></span><span class="vi">Xanh lá</span><span class="en">Green</span></td>
+            <td>NORMAL</td>
+            <td><span class="vi">Sinh hoạt bình thường: đi, đứng, ngồi, cúi nhặt đồ</span><span class="en">Normal daily activities: walking, standing, sitting, bending to retrieve items</span></td>
+          </tr>
+          <tr>
+            <td><span class="state-dot" style="background:#ffd700"></span><span class="vi">Vàng</span><span class="en">Yellow</span></td>
+            <td>SUSPICIOUS</td>
+            <td><span class="vi">Có dấu hiệu cần chú ý (loạng choạng, tư thế lạ)</span><span class="en">Suspicious behavior: temporary stumbling or unusual posture</span></td>
+          </tr>
+          <tr>
+            <td><span class="state-dot" style="background:#ff8c00"></span><span class="vi">Cam</span><span class="en">Orange</span></td>
+            <td>ABNORMAL</td>
+            <td><span class="vi">Nghi ngã hoặc biểu hiện bất thường kéo dài</span><span class="en">Abnormal state: prolonged irregular pose or suspected fall impact</span></td>
+          </tr>
+          <tr>
+            <td><span class="state-dot" style="background:#f00000"></span><span class="vi">Đỏ</span><span class="en">Red</span></td>
+            <td>HIGH RISK / ALERT</td>
+            <td><span class="vi">Nguy cơ cao, hệ thống phát cảnh báo; khung video có viền đỏ</span><span class="en">High emergency risk: audio alarm triggers, red flashing screen border</span></td>
+          </tr>
         </table>
       </div>
-      <p>Hệ thống theo dõi các dấu hiệu nhìn thấy được qua camera: <b>ngã đột ngột, nằm bất động trên sàn, loạng choạng mất thăng bằng, ôm đầu, ôm ngực, nôn ói</b>.</p>
-      <h3>Các nút dưới khung video</h3>
+      <p>
+        <span class="vi">Hệ thống theo dõi các dấu hiệu nhìn thấy được qua camera: <b>ngã đột ngột, nằm bất động trên sàn, loạng choạng mất thăng bằng, ôm đầu, ôm ngực, nôn ói</b>.</span>
+        <span class="en">The AI observes visible kinematics via camera: <b>sudden impact drops, prolonged immobility on the floor, severe stumbling/loss of balance, clutching head/chest, and convulsions</b>.</span>
+      </p>
+      <h3>
+        <span class="vi">Các nút điều khiển</span>
+        <span class="en">Player Controls</span>
+      </h3>
       <ul>
-        <li>⏯ <b>Tạm dừng / Tiếp tục</b> luồng video.</li>
-        <li>🔊 <b>Bật / Tắt âm thanh</b> chuông cảnh báo trên máy tính.</li>
-        <li>📷 <b>Chụp ảnh nhanh</b> màn hình hiện tại.</li>
-        <li>⛶ <b>Phóng to toàn màn hình</b>.</li>
+        <li>
+          <span class="vi">⏯ <b>Tạm dừng / Tiếp tục</b> luồng video.</span>
+          <span class="en">⏯ <b>Pause / Resume</b> live video stream.</span>
+        </li>
+        <li>
+          <span class="vi">🔊 <b>Bật / Tắt âm thanh</b> chuông cảnh báo trên máy tính.</span>
+          <span class="en">🔊 <b>Mute / Unmute</b> emergency audio chime on this computer.</span>
+        </li>
+        <li>
+          <span class="vi">📷 <b>Chụp ảnh nhanh</b> màn hình hiện tại.</span>
+          <span class="en">📷 <b>Snapshot</b> current camera frame.</span>
+        </li>
+        <li>
+          <span class="vi">⛶ <b>Phóng to toàn màn hình</b>.</span>
+          <span class="en">⛶ <b>Fullscreen</b> view for wall or secondary monitors.</span>
+        </li>
       </ul>
-      <div class="callout warn"><span class="ico">🔊</span><div>Nên để <b>bật âm thanh</b> và loa máy tính ở mức nghe rõ, để người trong nhà nghe được chuông khi có cảnh báo.</div></div>
+      <div class="callout warn">
+        <span class="ico">🔊</span>
+        <div>
+          <span class="vi">Nên để <b>bật âm thanh</b> và loa máy tính ở mức nghe rõ, để người trong nhà nghe được chuông khi có cảnh báo.</span>
+          <span class="en">Keep <b>audio unmuted</b> with computer speakers turned up so family members hear the alert chime instantly.</span>
+        </div>
+      </div>
     </section>
 
     <!-- 9 -->
     <section class="step" id="canh-bao">
-      <div class="step-head"><span class="step-num">9</span><h2>Khi có cảnh báo</h2></div>
+      <div class="step-head">
+        <span class="step-num">9</span>
+        <h2>
+          <span class="vi">Khi có cảnh báo</span>
+          <span class="en">When an Emergency Alert Fires</span>
+        </h2>
+      </div>
       <ol class="steps">
-        <li>Thanh đỏ <b>“PHÁT HIỆN HÀNH VI BẤT THƯỜNG / NGUY CƠ TÉ NGÃ!”</b> hiện trên đầu màn hình kèm chuông báo. Nếu đã cài Telegram, điện thoại cũng nhận tin nhắn kèm ảnh.</li>
-        <li><b>Kiểm tra người thân ngay lập tức</b>: đến tận nơi hoặc gọi điện.</li>
-        <li>Sau khi đã kiểm tra, bấm <span class="ui">ĐÃ XÁC NHẬN (DISMISS)</span> để tắt cảnh báo.</li>
-        <li>Ở thẻ <b>CẢNH BÁO TÉ NGÃ</b>: bấm <span class="ui">Xử lý</span> để đánh dấu sự việc đã giải quyết, hoặc <span class="ui">Xem chi tiết</span> để xem trong lịch sử cảnh báo.</li>
+        <li>
+          <span class="vi">Thanh đỏ <b>“PHÁT HIỆN HÀNH VI BẤT THƯỜNG / NGUY CƠ TÉ NGÃ!”</b> hiện trên đầu màn hình kèm chuông báo. Nếu đã cài Telegram, điện thoại cũng nhận tin nhắn kèm ảnh.</span>
+          <span class="en">A red flash bar <b>"ABNORMAL BEHAVIOR / FALL RISK DETECTED!"</b> appears at the top accompanied by an alarm chime. If Telegram is set up, your phone receives an immediate notification with photo snapshot.</span>
+        </li>
+        <li>
+          <span class="vi"><b>Kiểm tra người thân ngay lập tức</b>: đến tận nơi hoặc gọi điện.</span>
+          <span class="en"><b>Check the person immediately</b>: approach in person or make a direct voice/video call.</span>
+        </li>
+        <li>
+          <span class="vi">Sau khi đã kiểm tra, bấm <span class="ui">ĐÃ XÁC NHẬN (DISMISS)</span> để tắt cảnh báo.</span>
+          <span class="en">After checking the situation, click <span class="ui">CONFIRMED (DISMISS)</span> to silence the active alert banner.</span>
+        </li>
+        <li>
+          <span class="vi">Ở thẻ <b>CẢNH BÁO TÉ NGÃ</b>: bấm <span class="ui">Xử lý</span> để đánh dấu sự việc đã giải quyết, hoặc <span class="ui">Xem chi tiết</span> để xem trong lịch sử cảnh báo.</span>
+          <span class="en">On the <b>FALL ALERT</b> card: click <span class="ui">Process / Resolve</span> to mark it resolved, or <span class="ui">View Details</span> to inspect the event history log.</span>
+        </li>
       </ol>
-      <div class="callout danger"><span class="ico">🚑</span><div><b>Phần mềm chỉ hỗ trợ cảnh báo, không chẩn đoán bệnh.</b> Tin nhắn luôn là: <i>“Possible medical emergency / abnormal behavior detected. Please check the person.”</i> (Có thể có tình huống khẩn cấp, hãy kiểm tra người thân). Nếu nghi ngờ đột quỵ (méo miệng, yếu nửa người, nói khó) hoặc chấn thương nặng, <b>gọi cấp cứu 115 ngay</b>.</div></div>
-      <p>Ảnh chụp lúc xảy ra sự việc được lưu trên máy tại thư mục cài đặt, mục <code>data\processed\events</code>.</p>
+      <div class="callout danger">
+        <span class="ico">🚑</span>
+        <div>
+          <span class="vi"><b>Phần mềm chỉ hỗ trợ cảnh báo, không chẩn đoán bệnh.</b> Tin nhắn luôn là: <i>“Possible medical emergency / abnormal behavior detected. Please check the person.”</i> (Có thể có tình huống khẩn cấp, hãy kiểm tra người thân). Nếu nghi ngờ đột quỵ (méo miệng, yếu nửa người, nói khó) hoặc chấn thương nặng, <b>gọi cấp cứu 115 ngay</b>.</span>
+          <span class="en"><b>This system is a safety decision-support tool, not a medical diagnosis device.</b> The alert notification strictly states: <i>"Possible medical emergency / abnormal behavior detected. Please check the person."</i> If a stroke (facial droop, arm weakness, speech difficulty) or severe injury is suspected, <b>call emergency medical services immediately (115 / 911)</b>.</span>
+        </div>
+      </div>
+      <p>
+        <span class="vi">Ảnh chụp lúc xảy ra sự việc được lưu trên máy tại thư mục cài đặt, mục <code>data\processed\events</code>.</span>
+        <span class="en">Incident snapshots are archived locally in your project folder under <code>data\processed\events</code>.</span>
+      </p>
     </section>
 
     <!-- 10 -->
     <section class="step" id="telegram">
-      <div class="step-head"><span class="step-num">10</span><h2>Nhận cảnh báo qua Telegram trên điện thoại</h2></div>
-      <p>Để nhận tin ngay cả khi không ở gần máy tính, cài ứng dụng <b>Telegram</b> trên điện thoại, sau đó:</p>
+      <div class="step-head">
+        <span class="step-num">10</span>
+        <h2>
+          <span class="vi">Nhận cảnh báo qua Telegram trên điện thoại</span>
+          <span class="en">Receiving Phone Alerts via Telegram</span>
+        </h2>
+      </div>
+      <p>
+        <span class="vi">Để nhận tin ngay cả khi không ở gần máy tính, cài ứng dụng <b>Telegram</b> trên điện thoại, sau đó:</span>
+        <span class="en">To receive instant notifications even when away from your PC, install <b>Telegram</b> on your phone, then:</span>
+      </p>
       <ol class="steps">
-        <li>Mở Telegram, tìm <b>@BotFather</b>, gửi lệnh <code>/newbot</code> và đặt tên cho bot (ví dụ: <i>Canh bao nha ba</i>).</li>
-        <li>BotFather gửi về một <b>Bot Token</b> dạng <code>123456789:AAH...</code>. Sao chép đoạn này.</li>
-        <li>Trên ứng dụng giám sát, mở <span class="ui">⚙️ Cài đặt</span> → mục <b>📱 Thông báo qua Telegram</b>, dán vào ô <b>Bot Token</b>.</li>
-        <li>Trên Telegram, mở bot vừa tạo và bấm <span class="ui">Start</span>. Muốn cả nhà cùng nhận: thêm bot vào nhóm gia đình rồi nhắn một tin bất kỳ trong nhóm.</li>
-        <li>Quay lại ứng dụng, bấm <span class="ui">🔎 Lấy Chat ID tự động</span>. Ô <b>Chat ID</b> sẽ tự điền.</li>
-        <li>Bật công tắc Telegram, bấm <span class="ui">💾 Lưu cài đặt</span>.</li>
-        <li>Bấm <span class="ui">📨 Gửi tin thử</span>. Điện thoại nhận được tin là đã cài xong.</li>
+        <li>
+          <span class="vi">Mở Telegram, tìm <b>@BotFather</b>, gửi lệnh <code>/newbot</code> và đặt tên cho bot (ví dụ: <i>Canh bao nha ba</i>).</span>
+          <span class="en">Open Telegram, search for <b>@BotFather</b>, send the <code>/newbot</code> command, and choose a name and username for your alert bot.</span>
+        </li>
+        <li>
+          <span class="vi">BotFather gửi về một <b>Bot Token</b> dạng <code>123456789:AAH...</code>. Sao chép đoạn này.</span>
+          <span class="en">BotFather will reply with a <b>Bot Token</b> (e.g. <code>123456789:AAH...</code>). Copy this token string.</span>
+        </li>
+        <li>
+          <span class="vi">Trên ứng dụng giám sát, mở <span class="ui">⚙️ Cài đặt</span> → mục <b>📱 Thông báo qua Telegram</b>, dán vào ô <b>Bot Token</b>.</span>
+          <span class="en">In the monitoring dashboard, open <span class="ui">⚙️ Settings</span> → scroll to <b>📱 Telegram Notifications</b>, and paste it into the <b>Bot Token</b> field.</span>
+        </li>
+        <li>
+          <span class="vi">Trên Telegram, mở bot vừa tạo và bấm <span class="ui">Start</span>. Muốn cả nhà cùng nhận: thêm bot vào nhóm gia đình rồi nhắn một tin bất kỳ trong nhóm.</span>
+          <span class="en">In Telegram, open your newly created bot and click <span class="ui">Start</span>. For multi-person alerts: add the bot to a family group chat and send any message.</span>
+        </li>
+        <li>
+          <span class="vi">Quay lại ứng dụng, bấm <span class="ui">🔎 Lấy Chat ID tự động</span>. Ô <b>Chat ID</b> sẽ tự điền.</span>
+          <span class="en">Return to the app and click <span class="ui">🔎 Auto-detect Chat ID</span>. The <b>Chat ID</b> field will automatically populate.</span>
+        </li>
+        <li>
+          <span class="vi">Bật công tắc Telegram, bấm <span class="ui">💾 Lưu cài đặt</span>.</span>
+          <span class="en">Switch the Telegram toggle ON, then click <span class="ui">💾 Save Settings</span>.</span>
+        </li>
+        <li>
+          <span class="vi">Bấm <span class="ui">📨 Gửi tin thử</span>. Điện thoại nhận được tin là đã cài xong.</span>
+          <span class="en">Click <span class="ui">📨 Send Test Message</span>. Once your phone receives the test ping with photo, setup is complete!</span>
+        </li>
       </ol>
-      <div class="callout info"><span class="ico">🌐</span><div>Gửi Telegram cần máy tính có Internet. Mọi phân tích hình ảnh vẫn diễn ra trên máy, hệ thống chỉ gửi tin cảnh báo tới bot của bạn.</div></div>
+      <div class="callout info">
+        <span class="ico">🌐</span>
+        <div>
+          <span class="vi">Gửi Telegram cần máy tính có Internet. Mọi phân tích hình ảnh vẫn diễn ra trên máy, hệ thống chỉ gửi tin cảnh báo tới bot của bạn.</span>
+          <span class="en">Telegram dispatch requires an active internet connection on the host PC. All video analysis occurs strictly offline; only alert text and snapshot photos are transmitted to your private bot.</span>
+        </div>
+      </div>
     </section>
 
     <!-- 11 -->
     <section class="step" id="bat-tat">
-      <div class="step-head"><span class="step-num">11</span><h2>Bật, tạm dừng và tắt hệ thống</h2></div>
+      <div class="step-head">
+        <span class="step-num">11</span>
+        <h2>
+          <span class="vi">Bật, tạm dừng và tắt hệ thống</span>
+          <span class="en">Starting, Pausing and Shutting Down</span>
+        </h2>
+      </div>
       <div class="table-wrap">
         <table>
-          <tr><th>Muốn…</th><th>Thao tác</th></tr>
-          <tr><td><b>Bật</b> hệ thống</td><td>Nhấp đúp biểu tượng ứng dụng trên Desktop / menu Start</td></tr>
-          <tr><td><b>Tạm dừng</b> camera (vẫn giữ ứng dụng chạy)</td><td>Bấm <span class="ui">•••</span> → <span class="ui">⏹️ DỪNG STREAM</span></td></tr>
-          <tr><td><b>Bật lại</b> camera</td><td>Bấm <span class="ui">BẬT CAMERA STREAM</span> giữa khung video, hoặc <span class="ui">•••</span> → <span class="ui">ÁP DỤNG CAMERA</span></td></tr>
-          <tr><td>Video bị đứng hình</td><td>Bấm <span class="ui">•••</span> → <span class="ui">🔄 Tải lại luồng</span></td></tr>
-          <tr><td><b>Đóng cửa sổ</b> nhưng vẫn giám sát</td><td>Bấm nút <kbd>✕</kbd> của cửa sổ. Hệ thống <b>vẫn chạy ngầm</b> và vẫn gửi cảnh báo Telegram</td></tr>
-          <tr><td><b>Mở lại giao diện</b> khi đang chạy ngầm</td><td>Mở trình duyệt, vào <code>http://localhost:8000</code></td></tr>
-          <tr><td><b>Tắt hẳn</b> hệ thống</td><td><span class="ui">⚙️ Cài đặt</span> → <b>🛑 Dừng hoạt động hệ thống</b> → <span class="ui">TẮT HỆ THỐNG</span></td></tr>
+          <tr>
+            <th><span class="vi">Muốn…</span><span class="en">Task</span></th>
+            <th><span class="vi">Thao tác</span><span class="en">Action</span></th>
+          </tr>
+          <tr>
+            <td><span class="vi"><b>Bật</b> hệ thống</span><span class="en"><b>Start</b> the system</span></td>
+            <td><span class="vi">Nhấp đúp biểu tượng ứng dụng trên Desktop / menu Start</span><span class="en">Double-click the desktop shortcut or launch from Start Menu</span></td>
+          </tr>
+          <tr>
+            <td><span class="vi"><b>Tạm dừng</b> camera (vẫn giữ ứng dụng chạy)</span><span class="en"><b>Pause</b> camera (keeps app running)</span></td>
+            <td><span class="vi">Bấm <span class="ui">•••</span> → <span class="ui">⏹️ DỪNG STREAM</span></span><span class="en">Click <span class="ui">•••</span> → <span class="ui">⏹️ STOP STREAM</span></span></td>
+          </tr>
+          <tr>
+            <td><span class="vi"><b>Bật lại</b> camera</span><span class="en"><b>Resume</b> camera stream</span></td>
+            <td><span class="vi">Bấm <span class="ui">BẬT CAMERA STREAM</span> giữa khung video, hoặc <span class="ui">•••</span> → <span class="ui">ÁP DỤNG CAMERA</span></span><span class="en">Click <span class="ui">START CAMERA STREAM</span> in center of feed, or <span class="ui">•••</span> → <span class="ui">APPLY CAMERA</span></span></td>
+          </tr>
+          <tr>
+            <td><span class="vi">Video bị đứng hình</span><span class="en">Video feed frozen</span></td>
+            <td><span class="vi">Bấm <span class="ui">•••</span> → <span class="ui">🔄 Tải lại luồng</span></span><span class="en">Click <span class="ui">•••</span> → <span class="ui">🔄 Reload Stream</span></span></td>
+          </tr>
+          <tr>
+            <td><span class="vi"><b>Đóng cửa sổ</b> nhưng vẫn giám sát</span><span class="en"><b>Close window</b> while continuing surveillance</span></td>
+            <td><span class="vi">Bấm nút <kbd>✕</kbd> của cửa sổ. Hệ thống <b>vẫn chạy ngầm</b> và vẫn gửi cảnh báo Telegram</span><span class="en">Click the window <kbd>✕</kbd> button. The system <b>continues running in the background</b> and delivers Telegram alerts</span></td>
+          </tr>
+          <tr>
+            <td><span class="vi"><b>Mở lại giao diện</b> khi đang chạy ngầm</span><span class="en"><b>Reopen UI</b> while running in background</span></td>
+            <td><span class="vi">Mở trình duyệt, vào <code>http://localhost:8000</code></span><span class="en">Open your browser and navigate to <code>http://localhost:8000</code></span></td>
+          </tr>
+          <tr>
+            <td><span class="vi"><b>Tắt hẳn</b> hệ thống</span><span class="en"><b>Full system</b> shutdown</span></td>
+            <td><span class="vi"><span class="ui">⚙️ Cài đặt</span> → <b>🛑 Dừng hoạt động hệ thống</b> → <span class="ui">TẮT HỆ THỐNG</span></span><span class="en"><span class="ui">⚙️ Settings</span> → <b>🛑 Stop System Operation</b> → <span class="ui">SHUTDOWN SYSTEM</span></span></td>
+          </tr>
         </table>
       </div>
-      <div class="callout warn"><span class="ico">⚠️</span><div>Đóng cửa sổ <b>không</b> tắt hệ thống. Khi muốn tắt hẳn (ví dụ để dùng webcam cho cuộc gọi video), hãy dùng nút <b>TẮT HỆ THỐNG</b>. Nếu giao diện không mở được, có thể tắt bằng <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> → Task Manager → chọn <code>Fall_and_Stroke_Warning_System.exe</code> → <span class="ui">End task</span>.</div></div>
-      <div class="callout tip"><span class="ico">💡</span><div>Không mở ứng dụng hai lần cùng lúc: lần mở thứ hai sẽ tranh camera với lần đầu. Nếu đang chạy ngầm, chỉ cần vào <code>http://localhost:8000</code>.</div></div>
+      <div class="callout warn">
+        <span class="ico">⚠️</span>
+        <div>
+          <span class="vi">Đóng cửa sổ <b>không</b> tắt hệ thống. Khi muốn tắt hẳn (ví dụ để dùng webcam cho cuộc gọi video), hãy dùng nút <b>TẮT HỆ THỐNG</b>. Nếu giao diện không mở được, có thể tắt bằng <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> → Task Manager → chọn <code>Fall_and_Stroke_Warning_System.exe</code> → <span class="ui">End task</span>.</span>
+          <span class="en">Closing the window does <b>not</b> terminate background AI processing. To release the camera (e.g. for video conference meetings), click <b>SHUTDOWN SYSTEM</b> in Settings. If the UI cannot be reached, press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> → Task Manager → select <code>Fall_and_Stroke_Warning_System.exe</code> → <span class="ui">End task</span>.</span>
+        </div>
+      </div>
+      <div class="callout tip">
+        <span class="ico">💡</span>
+        <div>
+          <span class="vi">Không mở ứng dụng hai lần cùng lúc: lần mở thứ hai sẽ tranh camera với lần đầu. Nếu đang chạy ngầm, chỉ cần vào <code>http://localhost:8000</code>.</span>
+          <span class="en">Avoid launching the app twice simultaneously, as both instances will contend for the camera hardware. If already running, simply browse to <code>http://localhost:8000</code>.</span>
+        </div>
+      </div>
     </section>
 
     <!-- 12 -->
     <section class="step" id="tu-dong">
-      <div class="step-head"><span class="step-num">12</span><h2>Tự chạy cùng Windows (giám sát 24/7)</h2></div>
+      <div class="step-head">
+        <span class="step-num">12</span>
+        <h2>
+          <span class="vi">Tự chạy cùng Windows (giám sát 24/7)</span>
+          <span class="en">Autostart with Windows (24/7 Surveillance)</span>
+        </h2>
+      </div>
       <ol class="steps">
-        <li>Mở <span class="ui">⚙️ Cài đặt</span>.</li>
-        <li>Gạt công tắc <b>🚀 Tự động chạy nền khi mở máy tính</b> sang bật.</li>
-        <li>Từ lần khởi động máy sau, hệ thống tự chạy ngầm với camera đã <b>LƯU MẶC ĐỊNH</b>, không cần mở tay.</li>
+        <li>
+          <span class="vi">Mở <span class="ui">⚙️ Cài đặt</span>.</span>
+          <span class="en">Open <span class="ui">⚙️ Settings</span>.</span>
+        </li>
+        <li>
+          <span class="vi">Gạt công tắc <b>🚀 Tự động chạy nền khi mở máy tính</b> sang bật.</span>
+          <span class="en">Switch the toggle <b>🚀 Automatically run in background on startup</b> to ON.</span>
+        </li>
+        <li>
+          <span class="vi">Từ lần khởi động máy sau, hệ thống tự chạy ngầm với camera đã <b>LƯU MẶC ĐỊNH</b>, không cần mở tay.</span>
+          <span class="en">On every subsequent computer boot, the system automatically launches in background using your saved <b>DEFAULT CAMERA</b> without manual interaction.</span>
+        </li>
       </ol>
-      <p>Gạt công tắc về tắt nếu không muốn tự chạy nữa.</p>
+      <p>
+        <span class="vi">Gạt công tắc về tắt nếu không muốn tự chạy nữa.</span>
+        <span class="en">Switch the toggle OFF whenever you wish to disable autostart.</span>
+      </p>
     </section>
 
     <!-- 13 -->
     <section class="step" id="may-khac">
-      <div class="step-head"><span class="step-num">13</span><h2>Xem từ điện thoại hoặc máy tính khác trong nhà</h2></div>
+      <div class="step-head">
+        <span class="step-num">13</span>
+        <h2>
+          <span class="vi">Xem từ điện thoại hoặc máy tính khác trong nhà</span>
+          <span class="en">Accessing from Phone or Another Local Computer</span>
+        </h2>
+      </div>
       <ol class="steps">
-        <li>Trên máy đang chạy hệ thống, mở <b>Command Prompt</b> (gõ <code>cmd</code> trong menu Start), gõ <code>ipconfig</code> và nhấn Enter. Ghi lại dòng <b>IPv4 Address</b>, ví dụ <code>192.168.1.25</code>.</li>
-        <li>Trên điện thoại hoặc máy khác <b>cùng mạng Wi-Fi</b>, mở trình duyệt và vào <code>http://192.168.1.25:8000</code> (thay bằng IP vừa ghi).</li>
-        <li>Nếu không vào được: kiểm tra đã bấm <b>Allow</b> ở hộp thoại Windows Firewall lần đầu chạy; nếu lỡ bấm Cancel, vào <i>Windows Security → Firewall &amp; network protection → Allow an app through firewall</i> và cho phép ứng dụng.</li>
+        <li>
+          <span class="vi">Trên máy đang chạy hệ thống, mở <b>Command Prompt</b> (gõ <code>cmd</code> trong menu Start), gõ <code>ipconfig</code> và nhấn Enter. Ghi lại dòng <b>IPv4 Address</b>, ví dụ <code>192.168.1.25</code>.</span>
+          <span class="en">On the host PC, open <b>Command Prompt</b> (type <code>cmd</code> in Start menu), type <code>ipconfig</code>, and press Enter. Note the <b>IPv4 Address</b> (e.g. <code>192.168.1.25</code>).</span>
+        </li>
+        <li>
+          <span class="vi">Trên điện thoại hoặc máy khác <b>cùng mạng Wi-Fi</b>, mở trình duyệt và vào <code>http://192.168.1.25:8000</code> (thay bằng IP vừa ghi).</span>
+          <span class="en">On your smartphone or secondary device connected to the <b>same Wi-Fi network</b>, open the browser and navigate to <code>http://192.168.1.25:8000</code> (substitute with your host IP).</span>
+        </li>
+        <li>
+          <span class="vi">Nếu không vào được: kiểm tra đã bấm <b>Allow</b> ở hộp thoại Windows Firewall lần đầu chạy; nếu lỡ bấm Cancel, vào <i>Windows Security → Firewall &amp; network protection → Allow an app through firewall</i> và cho phép ứng dụng.</span>
+          <span class="en">If connection is refused: verify you clicked <b>Allow</b> on Windows Firewall when prompted. If cancelled, visit <i>Windows Security → Firewall &amp; network protection → Allow an app through firewall</i> and permit the application.</span>
+        </li>
       </ol>
-      <div class="callout warn"><span class="ico">🔐</span><div>Chỉ dùng trong mạng gia đình. Không mở cổng 8000 ra Internet trên modem, vì giao diện không có mật khẩu đăng nhập.</div></div>
+      <div class="callout warn">
+        <span class="ico">🔐</span>
+        <div>
+          <span class="vi">Chỉ dùng trong mạng gia đình. Không mở cổng 8000 ra Internet trên modem mà không có mạng riêng ảo bảo mật (VPN / Tailscale).</span>
+          <span class="en">Intended for secure internal home network use. Do not port-forward port 8000 to the public Internet without an encrypted tunnel (VPN or Tailscale).</span>
+        </div>
+      </div>
     </section>
 
     <!-- 14 -->
     <section class="step" id="rieng-tu">
-      <div class="step-head"><span class="step-num">14</span><h2>Quyền riêng tư</h2></div>
+      <div class="step-head">
+        <span class="step-num">14</span>
+        <h2>
+          <span class="vi">Quyền riêng tư &amp; Bảo mật dữ liệu</span>
+          <span class="en">Privacy &amp; Data Security</span>
+        </h2>
+      </div>
       <ul>
-        <li>Hình ảnh camera được xử lý <b>hoàn toàn trên máy tính của bạn</b>, không gửi lên máy chủ nào.</li>
-        <li>Muốn che mặt người trong khung hình: <span class="ui">⚙️ Cài đặt</span> → bật <b>🔒 Bảo vệ quyền riêng tư (Làm mờ mặt)</b>.</li>
-        <li>Ảnh sự cố chỉ lưu trên máy, trong thư mục <code>data\processed\events</code> của thư mục cài đặt. Bạn có thể xóa thủ công khi không cần nữa.</li>
-        <li>Dữ liệu chỉ rời máy khi bạn bật Telegram, và chỉ gửi tới bot do bạn tạo.</li>
-        <li>Mật khẩu camera IP và Bot Token Telegram được lưu riêng cho tài khoản Windows của bạn trong <code>%APPDATA%\FallStrokeWarning</code>, không nằm trong thư mục cài đặt.</li>
+        <li>
+          <span class="vi">Hình ảnh camera được xử lý <b>hoàn toàn trên máy tính của bạn</b>, không gửi lên máy chủ nào.</span>
+          <span class="en">All camera video frames are processed <b>entirely on your local PC</b>; no video streams are sent to external cloud servers.</span>
+        </li>
+        <li>
+          <span class="vi">Muốn che mặt người trong khung hình: <span class="ui">⚙️ Cài đặt</span> → bật <b>🔒 Bảo vệ quyền riêng tư (Làm mờ mặt)</b>.</span>
+          <span class="en">To conceal identities: open <span class="ui">⚙️ Settings</span> → toggle on <b>🔒 Privacy Protection (Face Blur)</b>.</span>
+        </li>
+        <li>
+          <span class="vi">Ảnh sự cố chỉ lưu trên máy, trong thư mục <code>data\processed\events</code> của thư mục cài đặt. Bạn có thể xóa thủ công khi không cần nữa.</span>
+          <span class="en">Incident snapshots are kept strictly on your local disk in <code>data\processed\events</code>. You can inspect or delete them at any time.</span>
+        </li>
+        <li>
+          <span class="vi">Dữ liệu chỉ rời máy khi bạn bật Telegram, và chỉ gửi tới bot do bạn tạo.</span>
+          <span class="en">Data only leaves your machine if you enable Telegram notifications, sending encrypted alerts directly to your private bot.</span>
+        </li>
+        <li>
+          <span class="vi">Mật khẩu camera IP và Bot Token Telegram được lưu riêng cho tài khoản Windows của bạn trong <code>%APPDATA%\FallStrokeWarning</code>, không nằm trong thư mục cài đặt.</span>
+          <span class="en">IP camera credentials and Telegram tokens are securely kept in your user profile at <code>%APPDATA%\FallStrokeWarning</code>.</span>
+        </li>
       </ul>
     </section>
 
     <!-- 15 -->
     <section class="step" id="su-co">
-      <div class="step-head"><span class="step-num">15</span><h2>Xử lý sự cố</h2></div>
+      <div class="step-head">
+        <span class="step-num">15</span>
+        <h2>
+          <span class="vi">Xử lý sự cố</span>
+          <span class="en">Troubleshooting &amp; FAQs</span>
+        </h2>
+      </div>
 
       <details>
-        <summary>Không cài được: Smart App Control chặn, không có nút “Run anyway”</summary>
-        <p>Trên Windows 11 cài mới, Smart App Control chặn mọi ứng dụng chưa ký số. Thử chuột phải tệp cài → <b>Properties</b> → tích <b>Unblock</b> → OK rồi chạy lại. Nếu vẫn bị chặn, chỉ còn cách tắt Smart App Control trong <i>Windows Security → App &amp; browser control</i>. Lưu ý: đã tắt thì không bật lại được nếu không cài lại Windows.</p>
+        <summary>
+          <span class="vi">Không cài được: Smart App Control chặn, không có nút “Run anyway”</span>
+          <span class="en">Cannot install: Smart App Control blocks installer without "Run anyway" button</span>
+        </summary>
+        <p>
+          <span class="vi">Trên Windows 11 cài mới, Smart App Control chặn mọi ứng dụng chưa ký số. Thử chuột phải tệp cài → <b>Properties</b> → tích <b>Unblock</b> → OK rồi chạy lại. Nếu vẫn bị chặn, chỉ còn cách tắt Smart App Control trong <i>Windows Security → App &amp; browser control</i>. Lưu ý: đã tắt thì không bật lại được nếu không cài lại Windows.</span>
+          <span class="en">On clean Windows 11 installs, Smart App Control blocks unsigned executable files. Try right-clicking the setup file → <b>Properties</b> → check <b>Unblock</b> → click OK and run again. If still blocked, Smart App Control can be disabled in <i>Windows Security → App &amp; browser control</i> (note: Microsoft does not permit re-enabling it without reinstalling Windows).</span>
+        </p>
       </details>
 
       <details>
-        <summary>Khung camera đen hoặc báo “camera bận”</summary>
+        <summary>
+          <span class="vi">Khung camera đen hoặc báo “camera bận”</span>
+          <span class="en">Camera preview is black or shows "Camera busy"</span>
+        </summary>
         <ul>
-          <li>Đóng các ứng dụng khác đang dùng camera (Zoom, Teams, Zalo, Camera…).</li>
-          <li>Vào <span class="ui">⚙️ Cài đặt</span> → <span class="ui">🔍 Kiểm tra Camera</span> để chẩn đoán.</li>
-          <li>Bấm <span class="ui">🔓 Mở Cài đặt Quyền Camera Windows</span>, bật <b>Camera access</b> và <b>Let desktop apps access your camera</b>.</li>
-          <li>Thử chọn webcam khác bằng nút <span class="ui">Quét</span> (Webcam 0 / 1).</li>
-          <li>Rút ra cắm lại webcam USB, sang cổng USB khác.</li>
+          <li>
+            <span class="vi">Đóng các ứng dụng khác đang dùng camera (Zoom, Teams, Zalo, Camera…).</span>
+            <span class="en">Close other applications currently accessing the camera (Zoom, Teams, Skype, Windows Camera).</span>
+          </li>
+          <li>
+            <span class="vi">Vào <span class="ui">⚙️ Cài đặt</span> → <span class="ui">🔍 Kiểm tra Camera</span> để chẩn đoán.</span>
+            <span class="en">Navigate to <span class="ui">⚙️ Settings</span> → click <span class="ui">🔍 Check Camera</span> to diagnose availability.</span>
+          </li>
+          <li>
+            <span class="vi">Bấm <span class="ui">🔓 Mở Cài đặt Quyền Camera Windows</span>, bật <b>Camera access</b> và <b>Let desktop apps access your camera</b>.</span>
+            <span class="en">Click <span class="ui">🔓 Open Windows Camera Privacy Settings</span>, enable <b>Camera access</b> and <b>Let desktop apps access your camera</b>.</span>
+          </li>
+          <li>
+            <span class="vi">Thử chọn webcam khác bằng nút <span class="ui">Quét</span> (Webcam 0 / 1).</span>
+            <span class="en">Try selecting another connected webcam using the <span class="ui">Scan</span> button (Webcam 0 / 1).</span>
+          </li>
+          <li>
+            <span class="vi">Rút ra cắm lại webcam USB sang cổng USB khác trên máy.</span>
+            <span class="en">Unplug and reconnect the USB webcam into a different USB port.</span>
+          </li>
         </ul>
       </details>
 
       <details>
-        <summary>Camera IP không kết nối được</summary>
+        <summary>
+          <span class="vi">Camera IP không kết nối được</span>
+          <span class="en">IP Camera cannot connect</span>
+        </summary>
         <ul>
-          <li>Kiểm tra máy tính và camera cùng mạng; thử <code>ping 192.168.1.100</code> trong Command Prompt.</li>
-          <li>Kiểm tra lại tên đăng nhập, mật khẩu (EZVIZ dùng mã xác minh trên tem, Tapo dùng “Tài khoản camera”).</li>
-          <li>Đảm bảo RTSP/ONVIF đã bật trong app của hãng.</li>
-          <li>Kiểm tra đường dẫn bằng phần mềm VLC: <i>Media → Open Network Stream</i>, dán đường dẫn RTSP. VLC xem được thì ứng dụng cũng kết nối được.</li>
-          <li>Camera đổi IP sau khi khởi động lại modem: đặt IP tĩnh cho camera trong modem.</li>
+          <li>
+            <span class="vi">Kiểm tra máy tính và camera cùng mạng; thử <code>ping 192.168.1.100</code> trong Command Prompt.</span>
+            <span class="en">Verify PC and camera are on the same subnet; test with <code>ping 192.168.1.100</code> in Command Prompt.</span>
+          </li>
+          <li>
+            <span class="vi">Kiểm tra lại tên đăng nhập, mật khẩu (EZVIZ dùng mã xác minh trên tem, Tapo dùng “Tài khoản camera”).</span>
+            <span class="en">Re-check username/password (EZVIZ uses printed verification code; Tapo requires a Camera Account created in Tapo app).</span>
+          </li>
+          <li>
+            <span class="vi">Đảm bảo RTSP/ONVIF đã bật trong app của hãng.</span>
+            <span class="en">Ensure RTSP/ONVIF streaming is enabled in the camera mobile app.</span>
+          </li>
+          <li>
+            <span class="vi">Kiểm tra đường dẫn bằng phần mềm VLC: <i>Media → Open Network Stream</i>, dán đường dẫn RTSP. VLC xem được thì ứng dụng cũng kết nối được.</span>
+            <span class="en">Test the RTSP URL in VLC media player: <i>Media → Open Network Stream</i>. If VLC displays video, the app will connect seamlessly.</span>
+          </li>
+          <li>
+            <span class="vi">Camera đổi IP sau khi khởi động lại modem: đặt IP tĩnh (DHCP Reservation) cho camera trong modem.</span>
+            <span class="en">If the camera IP changed after router reboot: assign a static DHCP reservation to the camera in your router.</span>
+          </li>
         </ul>
       </details>
 
       <details>
-        <summary>Video giật, FPS thấp</summary>
+        <summary>
+          <span class="vi">Video giật, FPS thấp</span>
+          <span class="en">Video stutter or low FPS</span>
+        </summary>
         <ul>
-          <li>Cắm sạc laptop; chọn chế độ nguồn <b>Best performance</b>.</li>
-          <li>Với camera IP, dùng <b>luồng phụ</b> (Hikvision <code>102</code>, Dahua <code>subtype=1</code>, Tapo <code>stream2</code>).</li>
-          <li>Đóng bớt các chương trình nặng đang chạy.</li>
-          <li>Xem số FPS hiện tại ở mục 📊 Thống kê; khoảng 15 FPS trở lên là đủ để nhận diện.</li>
+          <li>
+            <span class="vi">Cắm sạc laptop; chọn chế độ nguồn <b>Best performance</b>.</span>
+            <span class="en">Plug in your laptop charger and select <b>Best performance</b> power profile.</span>
+          </li>
+          <li>
+            <span class="vi">Với camera IP, dùng <b>luồng phụ</b> (Hikvision <code>102</code>, Dahua <code>subtype=1</code>, Tapo <code>stream2</code>).</span>
+            <span class="en">For IP cameras, switch to the <b>sub-stream</b> (Hikvision <code>102</code>, Dahua <code>subtype=1</code>, Tapo <code>stream2</code>).</span>
+          </li>
+          <li>
+            <span class="vi">Đóng bớt các chương trình đồ họa nặng đang chạy.</span>
+            <span class="en">Close background programs with high GPU/CPU utilization.</span>
+          </li>
+          <li>
+            <span class="vi">Xem số FPS hiện tại ở mục 📊 Thống kê; khoảng 15 FPS trở lên là đủ để nhận diện tốt.</span>
+            <span class="en">Observe the FPS counter in 📊 Statistics; 15+ FPS is sufficient for reliable real-time AI tracking.</span>
+          </li>
         </ul>
       </details>
 
       <details>
-        <summary>Giao diện không mở / trang localhost:8000 không vào được</summary>
+        <summary>
+          <span class="vi">Giao diện không mở / trang localhost:8000 không vào được</span>
+          <span class="en">UI window fails to appear or localhost:8000 unreachable</span>
+        </summary>
         <ul>
-          <li>Chờ thêm 30 giây sau khi mở ứng dụng rồi tải lại trang.</li>
-          <li>Có thể ứng dụng đã chạy ngầm từ trước: chỉ cần vào <code>http://localhost:8000</code>, không mở thêm lần nữa.</li>
-          <li>Cổng 8000 bị chương trình khác chiếm: tắt chương trình đó, hoặc khởi động lại máy rồi mở lại ứng dụng.</li>
+          <li>
+            <span class="vi">Chờ thêm 30 giây sau khi mở ứng dụng rồi tải lại trang.</span>
+            <span class="en">Wait 30 seconds after launching the app for model loading, then refresh the browser tab.</span>
+          </li>
+          <li>
+            <span class="vi">Có thể ứng dụng đã chạy ngầm từ trước: chỉ cần vào <code>http://localhost:8000</code>, không mở thêm lần nữa.</span>
+            <span class="en">The process might already be running in the background: simply visit <code>http://localhost:8000</code> without opening another instance.</span>
+          </li>
+          <li>
+            <span class="vi">Cổng 8000 bị chương trình khác chiếm: tắt chương trình đó, hoặc khởi động lại máy rồi mở lại ứng dụng.</span>
+            <span class="en">Port 8000 might be claimed by another application: close conflicting servers or reboot the PC and re-launch.</span>
+          </li>
         </ul>
       </details>
 
       <details>
-        <summary>Không nhận được tin Telegram</summary>
+        <summary>
+          <span class="vi">Không nhận được tin Telegram</span>
+          <span class="en">Telegram notifications not arriving</span>
+        </summary>
         <ul>
-          <li>Kiểm tra máy tính có Internet.</li>
-          <li>Đã bấm <b>Start</b> với bot (hoặc đã nhắn một tin trong nhóm có bot) trước khi bấm <b>Lấy Chat ID tự động</b>.</li>
-          <li>Bấm <span class="ui">📨 Gửi tin thử</span> và đọc thông báo lỗi hiện ra.</li>
+          <li>
+            <span class="vi">Kiểm tra máy tính có kết nối Internet.</span>
+            <span class="en">Check that the PC has an active internet connection.</span>
+          </li>
+          <li>
+            <span class="vi">Đã bấm <b>Start</b> với bot (hoặc đã nhắn một tin trong nhóm có bot) trước khi bấm <b>Lấy Chat ID tự động</b>.</span>
+            <span class="en">Ensure you clicked <b>Start</b> in the bot chat (or sent a message in the group containing the bot) prior to auto-detecting Chat ID.</span>
+          </li>
+          <li>
+            <span class="vi">Bấm <span class="ui">📨 Gửi tin thử</span> và đọc thông báo lỗi hiện ra.</span>
+            <span class="en">Click <span class="ui">📨 Send Test Message</span> and inspect the diagnostic feedback message.</span>
+          </li>
         </ul>
       </details>
 
       <details>
-        <summary>Cảnh báo nhầm hoặc bỏ sót</summary>
+        <summary>
+          <span class="vi">Cảnh báo nhầm hoặc bỏ sót</span>
+          <span class="en">False alerts or missed occurrences</span>
+        </summary>
         <ul>
-          <li>Kiểm tra lại vị trí camera theo <a href="#lap-dat">mục 7</a>: thấy toàn thân, đủ sáng, ít bị che.</li>
-          <li>Người ra khỏi khung hình hoặc bị che khuất thì hệ thống không theo dõi được.</li>
-          <li>Hệ thống chỉ là công cụ hỗ trợ, không thay thế sự chăm sóc trực tiếp của người thân.</li>
+          <li>
+            <span class="vi">Kiểm tra lại vị trí camera theo <a href="#lap-dat">mục 7</a>: thấy toàn thân, đủ sáng, ít bị che.</span>
+            <span class="en">Verify camera placement according to <a href="#lap-dat">Section 7</a>: head-to-toe visibility, proper lighting, minimal obstructions.</span>
+          </li>
+          <li>
+            <span class="vi">Người ra khỏi khung hình hoặc bị che khuất hoàn toàn thì hệ thống không thể theo dõi.</span>
+            <span class="en">If an individual leaves camera view or is occluded by tall furniture, the system cannot maintain pose tracking.</span>
+          </li>
+          <li>
+            <span class="vi">Hệ thống chỉ là công cụ hỗ trợ an toàn, không thay thế sự chăm sóc trực tiếp của người thân.</span>
+            <span class="en">This solution is a decision-support and safety aid; it does not replace direct caregiving.</span>
+          </li>
         </ul>
       </details>
 
       <details>
-        <summary>Gửi thông tin lỗi cho nhà phát triển</summary>
-        <p>Nhật ký hoạt động nằm ở <code>%LOCALAPPDATA%\Programs\Fall_and_Stroke_Warning_System\app_log.txt</code> (dán đường dẫn này vào thanh địa chỉ của File Explorer). Gửi kèm tệp này khi <a href="https://github.com/QuocCuong66/Project-monitoring-model/issues" target="_blank" rel="noopener noreferrer">báo lỗi trên GitHub</a>.</p>
+        <summary>
+          <span class="vi">Gửi thông tin lỗi cho nhà phát triển</span>
+          <span class="en">Sending diagnostic logs to developers</span>
+        </summary>
+        <p>
+          <span class="vi">Nhật ký hoạt động nằm ở <code>%LOCALAPPDATA%\Programs\Fall_and_Stroke_Warning_System\app_log.txt</code> (dán đường dẫn này vào thanh địa chỉ của File Explorer). Gửi kèm tệp này khi <a href="https://github.com/QuocCuong66/Project-monitoring-model/issues" target="_blank" rel="noopener noreferrer">báo lỗi trên GitHub</a>.</span>
+          <span class="en">Operational logs are located at <code>%LOCALAPPDATA%\Programs\Fall_and_Stroke_Warning_System\app_log.txt</code> (paste into File Explorer address bar). Attach this file when <a href="https://github.com/QuocCuong66/Project-monitoring-model/issues" target="_blank" rel="noopener noreferrer">filing a bug report on GitHub</a>.</span>
+        </p>
       </details>
     </section>
 
     <!-- 16 -->
     <section class="step" id="go-cai-dat">
-      <div class="step-head"><span class="step-num">16</span><h2>Gỡ cài đặt</h2></div>
+      <div class="step-head">
+        <span class="step-num">16</span>
+        <h2>
+          <span class="vi">Gỡ cài đặt</span>
+          <span class="en">Uninstallation</span>
+        </h2>
+      </div>
       <ol class="steps">
-        <li>Tắt hệ thống bằng nút <span class="ui">TẮT HỆ THỐNG</span> trong Cài đặt.</li>
-        <li>Mở <i>Settings → Apps → Installed apps</i>, tìm <b>Fall and Stroke Warning System</b> → <span class="ui">Uninstall</span>. Hoặc dùng lối tắt gỡ cài đặt trong menu Start.</li>
-        <li>Trình gỡ cài đặt cũng xóa mục tự chạy cùng Windows.</li>
+        <li>
+          <span class="vi">Tắt hệ thống bằng nút <span class="ui">TẮT HỆ THỐNG</span> trong Cài đặt.</span>
+          <span class="en">Shut down the background system using <span class="ui">SHUTDOWN SYSTEM</span> in Settings.</span>
+        </li>
+        <li>
+          <span class="vi">Mở <i>Settings → Apps → Installed apps</i>, tìm <b>Fall and Stroke Warning System</b> → <span class="ui">Uninstall</span>. Hoặc dùng lối tắt gỡ cài đặt trong menu Start.</span>
+          <span class="en">Open <i>Windows Settings → Apps → Installed apps</i>, find <b>Fall and Stroke Warning System</b> → click <span class="ui">Uninstall</span>, or launch the uninstaller shortcut from Start Menu.</span>
+        </li>
+        <li>
+          <span class="vi">Trình gỡ cài đặt cũng xóa mục tự chạy cùng Windows.</span>
+          <span class="en">The uninstaller cleanly deletes startup registry hooks and installed binaries.</span>
+        </li>
       </ol>
     </section>
 
@@ -580,14 +1325,30 @@
 </div>
 
 <footer>
-  <p>&copy; 2024–2026 Quốc Cường · <a href="index.html">Trang chủ</a> · <a href="https://github.com/QuocCuong66/Project-monitoring-model" target="_blank" rel="noopener noreferrer">Mã nguồn GitHub</a></p>
-  <p style="margin-top:8px;">Phần mềm hỗ trợ cảnh báo an toàn, không phải thiết bị y tế và không chẩn đoán bệnh.</p>
+  <p>
+    <span class="vi">&copy; 2024–2026 Quốc Cường · <a href="index.html">Trang chủ</a> · <a href="https://github.com/QuocCuong66/Project-monitoring-model" target="_blank" rel="noopener noreferrer">Mã nguồn GitHub</a></span>
+    <span class="en">&copy; 2024–2026 Quoc Cuong · <a href="index.html">Home</a> · <a href="https://github.com/QuocCuong66/Project-monitoring-model" target="_blank" rel="noopener noreferrer">GitHub Repository</a></span>
+  </p>
+  <p style="margin-top:8px;">
+    <span class="vi">Phần mềm hỗ trợ cảnh báo an toàn, không phải thiết bị y tế và không chẩn đoán bệnh.</span>
+    <span class="en">Safety decision-support software. Not a medical device; does not perform medical diagnosis.</span>
+  </p>
 </footer>
 
 <script>
+function toggleLang() {
+  const b = document.body;
+  b.dataset.lang = b.dataset.lang === 'vi' ? 'en' : 'vi';
+  document.documentElement.lang = b.dataset.lang;
+  try { localStorage.setItem('lang', b.dataset.lang); } catch(e) {}
+}
+
 try {
   const saved = localStorage.getItem('lang');
-  if (saved === 'en' || saved === 'vi') document.body.dataset.lang = saved;
+  if (saved === 'en' || saved === 'vi') {
+    document.body.dataset.lang = saved;
+    document.documentElement.lang = saved;
+  }
 } catch (e) {}
 
 // Highlight the table-of-contents entry for the section in view
