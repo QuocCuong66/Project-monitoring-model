@@ -58,6 +58,8 @@ data/processed/*
 !data/processed/.gitkeep
 datasets/*/*
 !datasets/*/.gitkeep
+tests/*.mp4
+tests/video_thumbnails/
 
 # Environment variables
 .env
@@ -80,3 +82,15 @@ runs/
 logs/
 results/
 *.log
+
+# Mô hình ONNX được đóng gói vào bộ cài — commit để GitHub Actions build được (xem fall_and_stroke_monitor.spec)
+!models/pose/rtmo-s.onnx
+!models/checkpoints/best_st_transformer.onnx
+!models/checkpoints/best_pose_autoencoder.onnx
+
+# Runtime log written next to app_runner.py
+app_log.txt
+
+# SSL certificates & keys
+configs/*.pem
+configs/*.key

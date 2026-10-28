@@ -2,7 +2,12 @@
 
 from src.temporal.sequence_buffer import SequenceBuffer, TrackSnapshot
 from src.temporal.temporal_features import TemporalFeatureExtractor, KinematicFeatures
-from src.temporal.temporal_model import SpatialTemporalTransformer, TCNSequenceClassifier
+
+try:
+    from src.temporal.temporal_model import SpatialTemporalTransformer, TCNSequenceClassifier
+except ImportError:
+    SpatialTemporalTransformer = None
+    TCNSequenceClassifier = None
 
 __all__ = [
     "SequenceBuffer",

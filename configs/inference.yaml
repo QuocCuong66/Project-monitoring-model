@@ -3,20 +3,32 @@
 runtime:
   device: "cuda" # cuda or cpu
   use_fp16: true
+  engine_type: "auto" # auto (TensorRT -> ONNX -> PyTorch), tensorrt, onnx, openvino, or pytorch
   batch_size: 1
   num_workers: 2
-  target_fps: 15
+  target_fps: 30
   sync_mode: false
+  temporal_device: "cuda"  # ST-Transformer & Autoencoder device ("cuda" = DirectML GPU, or "cpu")
+  dml_performance_preference: "high_performance" # DirectML GPU choice: high_performance (discrete GPU), minimum_power (integrated GPU), default (adapter 0)
+
+scheduling:
+  enable_tier0_motion_gating: true # Tier-0 Motion Gating (Bypass AI & throttle to 10-15 FPS when room is static)
+  pose_stride: 1            # Run single-pass pose + ByteTrack on every camera frame (~30 FPS multi-person tracking)
+  temporal_hz: 15.0         # Fixed sampling rate for temporal AI / risk FSM (models & thresholds are calibrated at 15 Hz)
+  action_stride: 2          # Run temporal AI every 2 frames (when Gated Trigger is OPEN)
+  enable_gated_ai: false    # true = skip the action model while the kinematic gate is closed (saves ~1 ms/track); false keeps upright stroke warning signs (staggering, clutching head/chest) visible
+
 
 display:
   show_ui: true
-  window_name: "Elderly AI Monitor - Realtime Stream"
+  window_name: "Fall and Stroke Warning System - Realtime Stream"
   show_bbox: true
-  show_skeleton: true
+  show_skeleton: false     # chỉ vẽ khung chữ nhật quanh người; AI vẫn dùng khung xương bên trong
   show_track_id: true
   show_action_label: true
   show_risk_gauge: true
   show_fps_meter: true
+  jpeg_quality: 80         # MJPEG web feed quality (encoded on a background thread)
   show_evidence: true
 
 privacy:
@@ -25,3 +37,17 @@ privacy:
   save_snapshots: true
   snapshot_dir: "data/processed/snapshots"
   retention_days: 7
+
+# Đoạn video bằng chứng: CHỈ lưu khi có cảnh báo té ngã, mặt mọi người đã được làm mờ (pixel hóa).
+# Giữ tối đa max_clips đoạn gần nhất; đoạn cũ hơn retention_days ngày tự động bị xóa.
+event_clips:
+  enabled: true
+  pre_seconds: 5.0          # Số giây ghi lại TRƯỚC thời điểm cảnh báo
+  post_seconds: 5.0         # Số giây ghi tiếp SAU thời điểm cảnh báo
+  fps: 10.0                 # Tốc độ khung hình của đoạn lưu (thấp để tiết kiệm RAM/ổ đĩa)
+  max_width: 640            # Thu nhỏ khung hình về chiều rộng này
+  retention_days: 7         # Tự động xóa đoạn video cũ hơn 7 ngày
+  max_clips: 30             # Chỉ giữ 30 đoạn gần nhất
+  fall_actions: ["falling", "lying", "immobile"]  # Hành vi được coi là té ngã (cảnh báo khác không lưu video)
+  codecs: [["VP80", ".webm"], ["mp4v", ".mp4"]]   # VP8/WebM phát được trực tiếp trên trình duyệt
+  maintenance_interval_s: 3600  # Kiểm tra & xóa dữ liệu hết hạn mỗi giờ (kể cả khi không có sự kiện mới)

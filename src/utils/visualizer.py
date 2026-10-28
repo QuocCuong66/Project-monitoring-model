@@ -21,6 +21,27 @@ COLOR_WHITE = (255, 255, 255)
 COLOR_DARK_BG = (20, 20, 20)
 
 
+def _blend_rect(
+    frame: np.ndarray,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    color: Tuple[int, int, int],
+    alpha: float,
+) -> None:
+    """Alpha-blend a filled rectangle in place, touching only the ROI (not a full-frame copy)."""
+    h, w = frame.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 <= x1 or y2 <= y1:
+        return
+    roi = frame[y1:y2, x1:x2]
+    solid = np.empty_like(roi)
+    solid[:] = color
+    cv2.addWeighted(solid, alpha, roi, 1.0 - alpha, 0, roi)
+
+
 class PipelineVisualizer:
     """Renders overlays on video frames for real-time monitoring display."""
 
@@ -92,8 +113,12 @@ class PipelineVisualizer:
         color = self.get_state_color(state)
         x1, y1, x2, y2 = [int(v) for v in bbox]
 
-        # Draw bounding box
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+        # Draw bounding box (Thick glowing red border when emergency/fall detected)
+        is_emergency = (state in ["HIGH_RISK", "ALERT_SENT"]) or (risk_score >= 0.7)
+        thickness = 4 if is_emergency else 2
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+        if is_emergency:
+            cv2.rectangle(frame, (max(0, x1 - 3), max(0, y1 - 3)), (min(frame.shape[1] - 1, x2 + 3), min(frame.shape[0] - 1, y2 + 3)), (0, 0, 255), 2, cv2.LINE_AA)
 
         # Draw top label badge
         label = f"ID:{track_id} | {action.upper()} | {state}"
@@ -138,9 +163,7 @@ class PipelineVisualizer:
         """Draw high visibility alert banner on emergency state."""
         h, w = frame.shape[:2]
         banner_h = 44
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (0, 0), (w, banner_h), (0, 0, 180), -1)
-        cv2.addWeighted(overlay, 0.85, frame, 0.15, 0, frame)
+        _blend_rect(frame, 0, 0, w, banner_h, (0, 0, 180), 0.85)
 
         msg = f"EMERGENCY ALERT: Possible medical emergency detected (ID:{track_id}, Risk: {risk_score:.2f})!"
         cv2.putText(
@@ -164,20 +187,18 @@ class PipelineVisualizer:
     ) -> np.ndarray:
         """Draw heads-up display (FPS, active people, status)."""
         h, w = frame.shape[:2]
-        hud_w, hud_h = 240, 80
+        hud_w, hud_h = 260, 95
         hud_x, hud_y = w - hud_w - 10, 10
 
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (hud_x, hud_y), (hud_x + hud_w, hud_y + hud_h), COLOR_DARK_BG, -1)
-        cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
+        _blend_rect(frame, hud_x, hud_y, hud_x + hud_w, hud_y + hud_h, COLOR_DARK_BG, 0.75)
         cv2.rectangle(frame, (hud_x, hud_y), (hud_x + hud_w, hud_y + hud_h), (80, 80, 80), 1)
 
         cv2.putText(
             frame,
-            f"FPS: {fps:.1f} | Status: {system_status}",
-            (hud_x + 10, hud_y + 24),
+            f"FPS: {fps:.1f} | Status: {system_status[:16]}",
+            (hud_x + 10, hud_y + 22),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
+            0.42,
             (0, 255, 120),
             1,
             cv2.LINE_AA,
@@ -185,25 +206,57 @@ class PipelineVisualizer:
         cv2.putText(
             frame,
             f"Monitored Persons: {active_tracks}",
-            (hud_x + 10, hud_y + 48),
+            (hud_x + 10, hud_y + 44),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
+            0.42,
             COLOR_WHITE,
             1,
             cv2.LINE_AA,
         )
+
+        # Tier-0 Motion Gating indicator
+        if telemetry and "tier0_status" in telemetry:
+            t0_status = telemetry["tier0_status"]
+            t0_ratio = telemetry.get("tier0_motion_ratio", 0.0) * 100.0
+            if t0_status == "IDLE":
+                t0_str = f"Tier-0: IDLE (AI OFF, 10-15 FPS)"
+                t0_color = (255, 200, 0)  # Cyan/Sky
+            elif t0_status == "COOLDOWN":
+                t0_str = f"Tier-0: COOLDOWN ({t0_ratio:.1f}%)"
+                t0_color = (0, 200, 255)  # Orange
+            else:
+                t0_str = f"Tier-0: ACTIVE ({t0_ratio:.1f}%)"
+                t0_color = (0, 255, 120)  # Green
+
+            cv2.putText(
+                frame,
+                t0_str,
+                (hud_x + 10, hud_y + 66),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.40,
+                t0_color,
+                1,
+                cv2.LINE_AA,
+            )
 
         if telemetry and "gpu_vram_allocated_mb" in telemetry:
             vram_mb = telemetry["gpu_vram_allocated_mb"]
             cv2.putText(
                 frame,
                 f"GPU VRAM: {vram_mb:.0f} MB",
-                (hud_x + 10, hud_y + 68),
+                (hud_x + 10, hud_y + 86),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.40,
+                0.38,
                 (200, 200, 200),
                 1,
                 cv2.LINE_AA,
             )
 
+        return frame
+
+    def draw_emergency_frame_border(self, frame: np.ndarray) -> np.ndarray:
+        """Draw an emergency flashing red border around the entire camera frame."""
+        h, w = frame.shape[:2]
+        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), (0, 0, 240), 6, cv2.LINE_AA)
+        cv2.rectangle(frame, (8, 8), (w - 9, h - 9), (0, 0, 255), 2, cv2.LINE_AA)
         return frame

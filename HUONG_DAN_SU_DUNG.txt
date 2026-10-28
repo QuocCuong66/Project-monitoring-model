@@ -1,0 +1,62 @@
+================================================================================
+     HƯỚNG DẪN SỬ DỤNG HỆ THỐNG CẢNH BÁO TÉ NGÃ VÀ ĐỘT QUỴ (STANDALONE APP)
+             (FALL AND STROKE WARNING SYSTEM — PHIÊN BẢN ĐỘC LẬP)
+================================================================================
+
+Chào bạn! Ứng dụng đã được đóng gói hoàn chỉnh thành một phần mềm Desktop độc lập.
+Người dùng cuối KHÔNG CẦN CÀI ĐẶT PYTHON, KHÔNG CẦN CHẠY DÒNG LỆNH, KHÔNG CẦN CÀI
+THÊM BẤT KỲ CÁI GÌ!
+
+--------------------------------------------------------------------------------
+CÁCH SỬ DỤNG SIÊU ĐƠN GIẢN (1-CLICK)
+--------------------------------------------------------------------------------
+1. Cắm Webcam USB vào máy tính (hoặc sử dụng webcam tích hợp trên laptop).
+
+2. NHẤP ĐÚP CHUỘT VÀO TỆP:
+   👉 Fall_and_Stroke_Warning_System.exe  (Có logo ứng dụng)
+
+3. Ứng dụng sẽ tự động:
+   • Khởi chạy hệ thống AI nhận diện hành vi (Pose + Kinematics + Fall/Stroke Detector).
+   • Mở ngay giao diện ứng dụng chuyên nghiệp (Native Desktop App Window).
+   • Hoàn toàn KHÔNG hiện cửa sổ dòng lệnh đen (No-Console).
+
+--------------------------------------------------------------------------------
+QUẢN LÝ CÁC TÍNH NĂNG TRÊN GIAO DIỆN (NÚT BÁNH RĂNG ⚙️)
+--------------------------------------------------------------------------------
+Ở góc trên cùng bên phải của ứng dụng, nhấp vào nút:
+👉 [⚙️ Cài Đặt]
+
+Tại đây bạn có thể:
+1. 🚀 BẬT/TẮT TỰ ĐỘNG CHẠY CÙNG WINDOWS:
+   - Gạt công tắc "Tự động chạy nền khi mở máy tính" sang BẬT.
+   - Mỗi khi bật máy tính, hệ thống tự động chạy bảo vệ người thân 24/7.
+
+2. 🎥 CHUYỂN ĐỔI CAMERA & QUYỀN CAMERA:
+   - Dễ dàng chọn Camera 0, Camera 1 hoặc RTSP/IP Camera trực tiếp trên web.
+   - Bấm "Kiểm tra Camera" để chẩn đoán kết nối nếu camera bận.
+
+3. 🔒 BẢO VỆ QUYỀN RIÊNG TƯ:
+   - Gạt công tắc "Làm mờ khuôn mặt" để che mờ mặt người theo dõi.
+
+4. 🛑 TẠM DỪNG / TẮT HỆ THỐNG:
+   - Tạm dừng camera: bấm nút ••• trên khung camera -> "DỪNG STREAM"
+     (bật lại bằng nút "BẬT CAMERA STREAM").
+   - Bấm nút [X] đóng cửa sổ: hệ thống VẪN CHẠY NGẦM và vẫn gửi cảnh báo.
+     Mở lại giao diện bằng trình duyệt: http://localhost:8000
+   - Tắt hẳn: vào menu Cài đặt và bấm nút đỏ "TẮT HỆ THỐNG".
+
+--------------------------------------------------------------------------------
+HƯỚNG DẪN CHI TIẾT (kết nối camera IP, Telegram, xử lý sự cố...)
+--------------------------------------------------------------------------------
+👉 https://quoccuong66.github.io/Project-monitoring-model/huong-dan.html
+
+--------------------------------------------------------------------------------
+GHI CHÚ KỸ THUẬT & LOGGING
+--------------------------------------------------------------------------------
+• Nếu cần kiểm tra lịch sử hoạt động hoặc chẩn đoán kỹ thuật, tệp "app_log.txt" 
+  ngay trong thư mục ứng dụng ghi lại toàn bộ nhật ký vận hành.
+• Ảnh chụp cảnh báo khẩn cấp được lưu trữ an toàn trong:
+  data\processed\events\
+
+Chúc bạn có trải nghiệm an tâm và thuận tiện nhất!
+================================================================================

@@ -1,9 +1,14 @@
 # Model Configuration for Elderly AI Monitor
 
+perception:
+  single_pass: true                # Single-pass YOLO-Pose (BBox + Keypoints combined)
+  iou_match_thresh: 0.45           # IoU matching threshold for track-to-keypoint pairing (supports fast posture changes)
+  strictly_person_only: true       # Class 0 only
+
 detector:
   architecture: "yolov8"
-  model_name: "yolov8s.pt"
-  weights_path: "models/detector/yolov8s.pt"
+  model_name: "models/detector/yolov8s.onnx"
+  weights_path: "models/detector/yolov8s.onnx"
   conf_threshold: 0.40
   iou_threshold: 0.50
   target_classes: [0] # 0 = person
@@ -15,24 +20,50 @@ tracker:
   track_low_thresh: 0.15
   new_track_thresh: 0.60
   match_thresh: 0.70
-  track_buffer_frames: 60
-  frame_rate: 15
+  track_buffer_frames: 60          # Keep lost tracks ~2s at 30 FPS tracking rate
+  frame_rate: 30
 
 pose:
-  architecture: "yolov8_pose"
-  model_name: "yolov8s-pose.pt"
-  weights_path: "models/pose/yolov8s-pose.pt"
+  architecture: "rtmo_s"
+  model_name: "models/pose/rtmo-s.onnx"
+  weights_path: "models/pose/rtmo-s.onnx"
   conf_threshold: 0.35
   num_keypoints: 17
   img_size: 640
 
+motion_gating:
+  enabled: true                    # Tier 0 Coarse Motion Gating (Bypass AI when room is still)
+  method: "mog2"                   # "mog2" or "frame_diff"
+  min_motion_ratio: 0.001          # Minimum ratio of moving pixels to trigger motion (0.1%)
+  history: 100                     # MOG2 history frames
+  var_threshold: 16.0              # MOG2 variance threshold
+  detect_shadows: false            # MOG2 shadow detection (disabled to save CPU)
+  cooldown_frames: 90              # Hold-on timer after motion ceases (~3.0s at 30 FPS)
+  idle_fps: 12.0                   # Throttled FPS when scene is static (10-15 FPS)
+  active_fps: 30.0                 # Target FPS when motion is detected
+  idle_stride: 2                   # Frame subsampling stride when idle (skip every other frame)
+  downsample_width: 320            # Downsample width for ultra-low CPU background subtraction
+  downsample_height: 240           # Downsample height
+  periodic_check_interval: 45      # Periodic safety keep-alive check (every 45 idle frames)
+
+gating:
+  enable_gating: true              # Tier 1 Kinematic Gated Filter
+
+  hold_on_frames: 45               # Hold gate open for 45 frames (~3.0s) after any trigger
+  vy_thresh: 1.10                  # Downward velocity threshold
+  ay_thresh: 0.75                  # Downward acceleration threshold
+  tilt_vel_thresh: 28.0            # Torso angular velocity (deg/s)
+  aspect_ratio_thresh: 1.15        # W/H ratio for floor horizontal posture
+  ground_proximity_thresh: 0.22    # Hip distance to floor threshold (fraction of upright height)
+  area_change_thresh: 0.32         # Z-axis collapse / contortion area change threshold
+
 temporal:
-  architecture: "st_transformer" # st_transformer or tcn
-  weights_path: "models/action/best_st_transformer.pt"
-  window_size: 30 # 30 frames ~ 2.0s at 15 FPS
-  stride: 5
+  architecture: "st_transformer"   # st_transformer (Spatial-Temporal Transformer) or tcn
+  weights_path: "models/checkpoints/best_st_transformer.onnx"
+  window_size: 30                  # 30 frames ~ 2.0s at 15 FPS
+  stride: 2                        # Sliding window stride S_action = 2
   num_classes: 10
-  feature_dim: 51 # 17 keypoints * 3 (x, y, conf)
+  feature_dim: 51                  # 17 keypoints * 3 (x, y, conf)
   hidden_dim: 128
   num_layers: 4
   num_heads: 4
@@ -40,8 +71,10 @@ temporal:
 
 anomaly:
   architecture: "pose_autoencoder"
-  weights_path: "models/anomaly/best_pose_autoencoder.pt"
+  weights_path: "models/checkpoints/best_pose_autoencoder.onnx"
   window_size: 30
   feature_dim: 51
   latent_dim: 64
   reconstruction_metric: "l1"
+  threshold: 0.3417                # L1 error at the p95 of held-out normal NTU windows (score 0.5)
+  steepness: 9.67                  # sigmoid slope: score 0.9 at the p99.5 normal error (training/train_anomaly.py)

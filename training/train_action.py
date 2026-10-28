@@ -1,167 +1,180 @@
-"""Training script for Spatial-Temporal Transformer on skeletal sequences with Focal Loss."""
+"""Train the Spatial-Temporal Transformer action model on NTU RGB+D 60 skeleton windows.
+
+Prerequisite: ``python training/prepare_ntu.py`` (builds data/processed/ntu_windows.npz).
+
+Augmentations act on raw pixel geometry before ``build_model_sequence`` (the exact live
+preprocessing): horizontal flip, in-plane rotation, top-down vertical squash (ceiling /
+doorbell cameras), time warping, occlusion and young-track front padding.
+
+Evaluation uses the NTU cross-subject split (unseen people). The best checkpoint by
+macro-F1 is saved to models/checkpoints/best_st_transformer.pt and exported to ONNX.
+"""
 
 import argparse
-import math
+import json
 import sys
 from pathlib import Path
-from typing import Tuple, Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-from src.temporal.temporal_model import SpatialTemporalTransformer
-from src.action.action_classifier import ACTION_CLASSES
-from src.utils.config import load_config
+from src.action.action_classifier import ACTION_CLASSES  # noqa: E402
+from src.temporal.sequence_features import build_model_sequence  # noqa: E402
+from src.temporal.temporal_model import SpatialTemporalTransformer  # noqa: E402
+
+FLIP_PERM = [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
+EMERGENCY = [ACTION_CLASSES.index(c) for c in ("falling", "stumbling", "abnormal_movement", "immobile")]
 
 
-class SkeletalSequenceDataset(Dataset):
-    """Dataset for skeletal sequence arrays (N, T, 17, 3)."""
+def augment(win: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    w = win.copy()
+    t = len(w)
+    valid = w[..., 2] > 0.2
+    c = w[..., :2][valid].mean(0) if np.any(valid) else np.zeros(2, np.float32)
+    pts = w[..., :2] - c
+    if rng.random() < 0.5:
+        pts[..., 0] *= -1
+        pts = pts[:, FLIP_PERM]
+        w[..., 2] = w[:, FLIP_PERM, 2]
+    th = np.deg2rad(rng.uniform(-20, 20))
+    rot = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]], np.float32)
+    pts = pts @ rot.T
+    pts[..., 1] *= rng.uniform(0.55, 1.05)   # high-mounted camera foreshortening
+    pts[..., 0] *= rng.uniform(0.9, 1.1)
+    w[..., :2] = pts + c
+    if rng.random() < 0.5:                  # time warp (speed 0.75x .. 1.33x), end-anchored
+        speed = rng.uniform(0.75, 1.33)
+        idx = np.clip(np.round(t - 1 - np.arange(t)[::-1] * speed), 0, t - 1).astype(int)
+        w = w[idx]
+    if rng.random() < 0.2:                  # lower body hidden (furniture / railings)
+        w[:, 11:, 2] = 0.0
+    drop = rng.random((t, 17)) < 0.05       # flickering joints
+    w[..., 2][drop] = 0.0
+    w[..., 2] = np.clip(w[..., 2] * rng.uniform(0.8, 1.1), 0, 1)
+    if rng.random() < 0.15:                 # young track: history shorter than the window
+        k = int(rng.integers(6, t))
+        w = np.concatenate([np.repeat(w[t - k:t - k + 1], t - k, 0), w[t - k:]], 0)
+    return w
 
-    def __init__(self, sequences: np.ndarray, labels: np.ndarray, augment: bool = False) -> None:
-        self.sequences = sequences.astype(np.float32)
-        self.labels = labels.astype(np.int64)
-        self.augment = augment
+
+class WindowDataset(Dataset):
+    def __init__(self, x: np.ndarray, y: np.ndarray, train: bool, seed: int = 0) -> None:
+        self.x, self.y, self.train = x, y, train
+        self.rng = np.random.default_rng(seed)
+        self.t = x.shape[1]
 
     def __len__(self) -> int:
-        return len(self.sequences)
+        return len(self.y)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        seq = self.sequences[idx].copy()
-
-        if self.augment:
-            seq = self._apply_augmentation(seq)
-
-        return torch.from_numpy(seq), torch.tensor(self.labels[idx])
-
-    def _apply_augmentation(self, seq: np.ndarray) -> np.ndarray:
-        # 1. Coordinate jitter
-        noise = np.random.normal(0, 0.01, size=seq.shape).astype(np.float32)
-        seq[:, :, :2] += noise[:, :, :2]
-
-        # 2. Random 2D planar rotation (-15 to +15 deg)
-        angle_deg = np.random.uniform(-15.0, 15.0)
-        angle_rad = math.radians(angle_deg)
-        cos_a, sin_a = math.cos(angle_rad), math.sin(angle_rad)
-        rot_mat = np.array([[cos_a, -sin_a], [sin_a, cos_a]], dtype=np.float32)
-        seq[:, :, :2] = np.dot(seq[:, :, :2], rot_mat)
-
-        # 3. Keypoint occlusion dropout (drop 1-2 keypoints)
-        if np.random.rand() > 0.5:
-            drop_idx = np.random.randint(0, 17)
-            seq[:, drop_idx, :2] = 0.0
-            seq[:, drop_idx, 2] = 0.0
-
-        return seq
+    def __getitem__(self, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        win = self.x[i].astype(np.float32)
+        if self.train:
+            win = augment(win, self.rng)
+        seq = build_model_sequence(win, self.t)
+        if self.train:
+            seq[..., :2] += self.rng.normal(0, 0.02, seq[..., :2].shape).astype(np.float32) * (seq[..., 2:] > 0)
+        return torch.from_numpy(seq), torch.tensor(self.y[i])
 
 
-class MultiClassFocalLoss(nn.Module):
-    """Focal Loss to handle class imbalance (rare fall events vs frequent walking)."""
-
-    def __init__(self, alpha: Optional[torch.Tensor] = None, gamma: float = 2.0) -> None:
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-
-    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce_loss = nn.functional.cross_entropy(inputs, targets, reduction="none", weight=self.alpha)
-        pt = torch.exp(-ce_loss)
-        focal_loss = ((1.0 - pt) ** self.gamma) * ce_loss
-        return focal_loss.mean()
-
-
-def train_action_model(
-    train_loader: DataLoader,
-    val_loader: DataLoader,
-    num_classes: int = 10,
-    epochs: int = 50,
-    lr: float = 0.001,
-    device: str = "cuda",
-    save_path: str = "models/checkpoints/best_st_transformer.pt",
-) -> None:
-    """Train SpatialTemporalTransformer model."""
-    dev = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
-    print(f"[Info] Training on device: {dev}")
-
-    model = SpatialTemporalTransformer(input_dim=51, num_classes=num_classes).to(dev)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-    criterion = MultiClassFocalLoss(gamma=2.0)
-
-    best_val_acc = 0.0
-    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-
-    for epoch in range(1, epochs + 1):
-        model.train()
-        total_loss, correct, total = 0.0, 0, 0
-
-        for x, y in train_loader:
-            x, y = x.to(dev), y.to(dev)
-            optimizer.zero_grad()
-            logits = model(x)
-            loss = criterion(logits, y)
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.item() * len(y)
-            preds = torch.argmax(logits, dim=1)
-            correct += (preds == y).sum().item()
-            total += len(y)
-
-        scheduler.step()
-        train_acc = correct / max(1, total)
-
-        # Validation
-        model.eval()
-        v_correct, v_total = 0, 0
-        with torch.no_grad():
-            for x, y in val_loader:
-                x, y = x.to(dev), y.to(dev)
-                logits = model(x)
-                preds = torch.argmax(logits, dim=1)
-                v_correct += (preds == y).sum().item()
-                v_total += len(y)
-
-        val_acc = v_correct / max(1, v_total)
-        print(f"Epoch {epoch:02d}/{epochs:02d} - Loss: {total_loss/total:.4f} - Train Acc: {train_acc*100:.1f}% - Val Acc: {val_acc*100:.1f}%")
-
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save({"model_state_dict": model.state_dict(), "val_acc": val_acc}, save_path)
-            print(f"  --> Saved new best checkpoint to {save_path} (Val Acc: {val_acc*100:.1f}%)")
+def evaluate(model: nn.Module, loader: DataLoader, dev: torch.device) -> dict:
+    model.eval()
+    n = len(ACTION_CLASSES)
+    cm = np.zeros((n, n), dtype=np.int64)
+    with torch.no_grad():
+        for x, y in loader:
+            pred = model(x.to(dev)).argmax(1).cpu().numpy()
+            for a, b in zip(y.numpy(), pred):
+                cm[a, b] += 1
+    tp = np.diag(cm).astype(float)
+    prec = tp / np.maximum(1, cm.sum(0))
+    rec = tp / np.maximum(1, cm.sum(1))
+    f1 = 2 * prec * rec / np.maximum(1e-9, prec + rec)
+    present = cm.sum(1) > 0
+    em = np.isin(np.arange(n), EMERGENCY)
+    em_tp = cm[np.ix_(em, em)].sum()
+    return {
+        "acc": float(tp.sum() / max(1, cm.sum())),
+        "macro_f1": float(f1[present].mean()),
+        "per_class": {ACTION_CLASSES[i]: {"precision": round(prec[i], 3), "recall": round(rec[i], 3),
+                                          "f1": round(f1[i], 3), "support": int(cm[i].sum())}
+                      for i in range(n) if present[i]},
+        "emergency_recall": float(em_tp / max(1, cm[em].sum())),
+        "emergency_precision": float(em_tp / max(1, cm[:, em].sum())),
+        "confusion": cm.tolist(),
+    }
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train Temporal Action Model")
-    parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--lr", type=float, default=0.001)
-    parser.add_argument("--device", type=str, default="cuda")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="Train ST-Transformer on NTU RGB+D 60 windows")
+    ap.add_argument("--data", default=str(ROOT / "data/processed/ntu_windows.npz"))
+    ap.add_argument("--epochs", type=int, default=60)
+    ap.add_argument("--batch-size", type=int, default=128)
+    ap.add_argument("--lr", type=float, default=5e-4)
+    ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--out", default=str(ROOT / "models/checkpoints/best_st_transformer.pt"))
+    args = ap.parse_args()
 
-    # Generate synthetic training samples if no pre-extracted dataset exists
-    print("[Info] Preparing training datasets...")
-    N = 200
-    T = 30
-    synth_x = np.random.randn(N, T, 17, 3).astype(np.float32)
-    synth_y = np.random.randint(0, len(ACTION_CLASSES), size=(N,)).astype(np.int64)
+    d = np.load(args.data)
+    x, y, split = d["x"], d["y"], d["split"]
+    tr, va = split == 0, split == 1
+    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[Info] train={tr.sum()} val={va.sum()} device={dev}")
 
-    train_ds = SkeletalSequenceDataset(synth_x[:160], synth_y[:160], augment=True)
-    val_ds = SkeletalSequenceDataset(synth_x[160:], synth_y[160:], augment=False)
+    counts = np.bincount(y[tr], minlength=len(ACTION_CLASSES)).astype(float)
+    weights = np.where(counts > 0, counts.sum() / np.maximum(1, counts) / len(ACTION_CLASSES), 0.0)
+    weights = np.sqrt(weights)  # soften: rare medical classes up-weighted without dominating
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
+    train_loader = DataLoader(WindowDataset(x[tr], y[tr], True), batch_size=args.batch_size, shuffle=True,
+                              num_workers=args.workers, persistent_workers=args.workers > 0, drop_last=True)
+    val_loader = DataLoader(WindowDataset(x[va], y[va], False), batch_size=256, num_workers=args.workers,
+                            persistent_workers=args.workers > 0)
 
-    train_action_model(
-        train_loader=train_loader,
-        val_loader=val_loader,
-        num_classes=len(ACTION_CLASSES),
-        epochs=args.epochs,
-        lr=args.lr,
-        device=args.device,
-    )
+    model = SpatialTemporalTransformer(input_dim=51, num_classes=len(ACTION_CLASSES)).to(dev)
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.05)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.epochs * len(train_loader),
+                                                pct_start=0.1)
+    crit = nn.CrossEntropyLoss(weight=torch.tensor(weights, dtype=torch.float32, device=dev), label_smoothing=0.1)
+
+    best = -1.0
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for epoch in range(1, args.epochs + 1):
+        model.train()
+        tot, n = 0.0, 0
+        for xb, yb in train_loader:
+            xb, yb = xb.to(dev), yb.to(dev)
+            opt.zero_grad()
+            loss = crit(model(xb), yb)
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.step()
+            sched.step()
+            tot += loss.item() * len(yb)
+            n += len(yb)
+        m = evaluate(model, val_loader, dev)
+        pc = m["per_class"]
+        print(f"Epoch {epoch:02d} loss={tot / n:.3f} val_acc={m['acc']:.3f} macroF1={m['macro_f1']:.3f} "
+              f"fall_R={pc['falling']['recall']:.2f} stagger_R={pc['stumbling']['recall']:.2f} "
+              f"distress_R={pc['abnormal_movement']['recall']:.2f} emergency_R={m['emergency_recall']:.3f}", flush=True)
+        if m["macro_f1"] > best:
+            best = m["macro_f1"]
+            torch.save({"model_state_dict": model.state_dict(), "metrics": m, "classes": ACTION_CLASSES}, out)
+
+    ckpt = torch.load(out, map_location="cpu", weights_only=False)
+    model.load_state_dict(ckpt["model_state_dict"])
+    model.eval().cpu()
+    onnx_path = out.with_suffix(".onnx")
+    torch.onnx.export(model, torch.zeros(1, x.shape[1], 17, 3), str(onnx_path), opset_version=17,
+                      input_names=["skeletal_sequence"], output_names=["action_logits"],
+                      dynamic_axes={"skeletal_sequence": {0: "batch"}, "action_logits": {0: "batch"}}, dynamo=False)
+    report = out.with_name("st_transformer_metrics.json")
+    report.write_text(json.dumps(ckpt["metrics"], indent=2))
+    print(f"[Done] best macro-F1={best:.3f} -> {out}, {onnx_path}, {report}")
 
 
 if __name__ == "__main__":

@@ -1,42 +1,47 @@
-"""Unit tests for Event State Machine debounce and hysteresis."""
+"""Alerts need the risk to stay high for the whole debounce window, not one spike."""
 
-import pytest
+from src.risk.state_machine import EventStateMachine, MonitorState
 from src.risk.threshold_manager import ThresholdManager
-from src.risk.state_machine import MonitorState, EventStateMachine
+
+CFG = {
+    "state_machine": {
+        "thresh_suspicious": 0.50, "thresh_abnormal": 0.68, "thresh_high_risk": 0.80,
+        "min_duration_suspicious": 0.3, "min_duration_abnormal": 0.6,
+        "min_duration_high_risk": 0.6, "min_recovery_duration": 2.5,
+    },
+}
+DT = 1.0 / 15.0
 
 
-def test_state_machine_escalation_requires_duration():
-    tm = ThresholdManager()
-    sm = EventStateMachine(tm, initial_time=0.0)
-    assert sm.state == MonitorState.NORMAL
-
-    # High risk score on a SINGLE frame at t=0.1s -> should promote only to SUSPICIOUS
-    state, changed = sm.update(risk_score=0.92, action="falling", timestamp=0.1)
-    assert state == MonitorState.SUSPICIOUS
-    assert changed
-
-    # Immediately on next frame at t=0.2s (only 0.1s in state, min is 0.5s) -> should remain in SUSPICIOUS
-    state, changed = sm.update(risk_score=0.92, action="falling", timestamp=0.2)
-    assert state == MonitorState.SUSPICIOUS
-    assert not changed
-
-    # Once time reaches 0.7s (>0.5s debounce) -> promotes to ABNORMAL
-    state, changed = sm.update(risk_score=0.92, action="falling", timestamp=0.7)
-    assert state == MonitorState.ABNORMAL
-    assert changed
+def _run(sm: EventStateMachine, t: float, seconds: float, risk: float, action: str) -> tuple[float, list[str]]:
+    states = []
+    for _ in range(int(round(seconds / DT))):
+        state, _ = sm.update(risk_score=risk, action=action, timestamp=t)
+        states.append(state.value)
+        t += DT
+    return t, states
 
 
-def test_state_machine_recovery_on_getting_up():
-    tm = ThresholdManager()
-    sm = EventStateMachine(tm, initial_time=0.0)
-    sm.state = MonitorState.ABNORMAL
-    sm.state_entry_time = 0.0
+def test_sustained_fall_risk_alerts() -> None:
+    sm = EventStateMachine(ThresholdManager(CFG), initial_time=0.0)
+    _, states = _run(sm, 0.0, 2.0, 0.9, "falling")
+    assert MonitorState.ALERT_SENT.value in states
 
-    # Person starts getting up; risk drops to 0.1 at t=1.0s (in recovery phase, holds state)
-    state, changed = sm.update(risk_score=0.10, action="getting_up", timestamp=1.0)
-    assert state == MonitorState.ABNORMAL
 
-    # Continues standing normally for > min_recovery_duration (3.0s) -> t=4.5s
-    state, changed = sm.update(risk_score=0.05, action="standing", timestamp=4.5)
-    assert state == MonitorState.NORMAL
-    assert changed
+def test_single_spike_after_walking_does_not_alert() -> None:
+    sm = EventStateMachine(ThresholdManager(CFG), initial_time=0.0)
+    t, states = _run(sm, 0.0, 1.0, 0.9, "falling")          # reaches HIGH_RISK
+    assert states[-1] == MonitorState.HIGH_RISK.value
+    t, _ = _run(sm, t, 1.0, 0.1, "walking")                  # walking label holds HIGH_RISK
+    _, states = _run(sm, t, DT * 2, 0.85, "falling")          # one brief spike
+    assert MonitorState.ALERT_SENT.value not in states
+
+
+def test_flickering_risk_does_not_alert() -> None:
+    sm = EventStateMachine(ThresholdManager(CFG), initial_time=0.0)
+    t, states = 0.0, []
+    for _ in range(20):                                       # 0.13 s high / 0.13 s low, 2.7 s total
+        t, s1 = _run(sm, t, DT * 2, 0.9, "falling")
+        t, s2 = _run(sm, t, DT * 2, 0.6, "bending")
+        states += s1 + s2
+    assert MonitorState.ALERT_SENT.value not in states

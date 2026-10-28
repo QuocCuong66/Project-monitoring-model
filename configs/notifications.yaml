@@ -1,0 +1,11 @@
+# Notification Channel Configuration
+
+# Thư mục (nằm trong %APPDATA%) lưu Bot Token / Chat ID do người dùng nhập trên giao diện.
+# Lưu ngoài thư mục cài đặt để token không bị đóng gói vào bộ cài, không bị commit lên git
+# và giữ nguyên khi cài bản cập nhật.
+user_settings_dir: "FallStrokeWarning"
+
+telegram:
+  api_base_url: "https://api.telegram.org"
+  request_timeout_seconds: 5.0
+  photo_timeout_seconds: 10.0

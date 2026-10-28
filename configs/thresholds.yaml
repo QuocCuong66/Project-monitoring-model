@@ -1,25 +1,168 @@
 # Risk Scoring & Event State Machine Thresholds
 
 risk_weights:
-  action_prob: 0.40       # Weight for supervised action classifier (falling, immobile, etc.)
-  anomaly_score: 0.25     # Weight for unsupervised pose autoencoder
-  kinematics: 0.20        # Weight for physical drop speed, aspect ratio, torso angle
+  action_prob: 0.35       # Weight for supervised action classifier (falling, immobile, etc.)
+  anomaly_score: 0.15     # Weight for unsupervised pose autoencoder
+  kinematics: 0.35        # Weight for physical drop speed, aspect ratio, torso angle
   immobility: 0.15        # Weight for post-fall immobility index
 
 state_machine:
-  # Risk Score thresholds: [0.0, 1.0]
-  thresh_suspicious: 0.55
-  thresh_abnormal: 0.72
-  thresh_high_risk: 0.85
+  # Risk Score thresholds: [0.0, 1.0]  (siết chặt để chống báo động giả khi di chuyển trước camera)
+  thresh_suspicious: 0.60       # was 0.55 (0.50 originally)
+  thresh_abnormal: 0.76         # was 0.72 (0.68)
+  thresh_high_risk: 0.88        # was 0.85 (0.80)
+
+  # Multi-signal escalation: drop physics AND action model must BOTH reach this before they can
+  # override the weighted score (one noisy signal alone cannot jump straight to high risk)
+  synergy_min_signal: 0.55      # was 0.45 (hard-coded)
+  immobility_synergy_min: 0.60  # was 0.40 (hard-coded): stillness required for the "lying still" boost
 
   # Temporal confirmation & hysteresis durations (in seconds)
-  min_duration_suspicious: 0.5
-  min_duration_abnormal: 1.5
-  min_duration_high_risk: 2.5
-  min_recovery_duration: 3.0    # Seconds of normal behavior needed to reset state
+  # Fastest path to an alarm = min_duration_abnormal + min_duration_high_risk = 3.5 s of sustained
+  # high risk, so bends / sitting down / turning over (< 3 s) can never alert.
+  min_duration_suspicious: 0.5  # was 0.3
+  min_duration_abnormal: 1.5    # was 1.0 (0.6)
+  min_duration_high_risk: 2.0   # was 1.5 (0.6)
+  min_recovery_duration: 3.0    # was 2.5: seconds of normal behavior needed to reset state
+
+# PHẠM VI THEO DÕI (tạm thời): MIỄN KHÔNG NẰM LÀ THEO DÕI (đứng, đi lại, ngồi đều theo dõi đầy đủ).
+# Người đang nằm được gán nhãn AN TOÀN ("SAFE"): điểm rủi ro = 0, không báo động (cả 2 luồng), TRỪ KHI:
+#   - nằm ra do TÉ / ĐỔ GỤC (cách nằm xuống thuộc fall_onset_reasons), hoặc
+#   - đang / vừa CO GIẬT (giật nhịp nhàng nhiều phần cơ thể cùng lúc, xem mục convulsion).
+# Chủ động nằm (ngồi rồi nằm, dừng lại rồi từ từ hạ người, đã nằm sẵn khi bắt đầu theo dõi) = AN TOÀN.
+# Đặt safe_when_lying: false để quay lại phân tích đầy đủ khi nằm (cố ngồi dậy, nằm im trên sàn, đột quỵ...).
+monitoring_scope:
+  safe_when_lying: true
+  # Cách nằm xuống được tính là TÉ / ĐỔ GỤC (xem lying_onset_reason)
+  fall_onset_reasons: [fast_drop, upright_to_floor, unsteady_before, collapse_from_sitting, convulsion]
+
+# CO GIẬT: giật NHỊP NHÀNG (1.8 - 6 lần / giây) ở >= 3 phần cơ thể CÙNG NHỊP (có cả tay và chân), kéo dài.
+# Khác với: chủ động nằm / trở mình (1 lần cử động chậm rồi thôi), bấm điện thoại (chỉ 1 cổ tay),
+# đi bộ / tập thể dục (vung tay chân ~1 - 1.5 lần / giây), vỗ tay / vẫy tay (chỉ có tay), nhiễu khung xương
+# (nhỏ, không đều, không cùng nhịp). Chỉ là dấu hiệu nhìn thấy, KHÔNG chẩn đoán động kinh.
+# Co giật ở bất kỳ tư thế nào: cảnh báo luồng ĐỘT QUỴ / BỆNH CẤP; co giật rồi nằm ra: thêm luồng TÉ NGÃ.
+convulsion:
+  enabled: true
+  window_seconds: 4.0         # cửa sổ phân tích nhịp (giây)
+  min_hz: 1.8                 # chậm hơn = đi bộ / tập thể dục
+  max_hz: 6.0
+  min_amplitude: 0.05         # biên độ giật (chiều dài thân); nhiễu khung xương nhỏ hơn
+  min_band_share: 0.65        # >= 65% cử động nằm trong dải tần co giật
+  min_peak_share: 0.35        # có 1 nhịp rõ ràng (nhiễu thì trải đều mọi tần số)
+  min_parts: 3                # >= 3 phần (đầu, tay trái, tay phải, chân trái, chân phải), có cả tay và chân
+  max_frequency_spread: 1.0   # các phần giật cùng nhịp (lệch <= 1 lần / giây)
+  min_seconds: 5.0            # giật liên tục >= 5 giây = CO GIẬT
+  gap_seconds: 1.0            # ngắt quãng ngắn (bị che, nghỉ giữa các cơn giật) không tính là dừng
+  min_positive_share: 0.8     # ...nhưng >= 80% thời gian phải thấy nhịp giật (nhiễu nặng chỉ ~60%)
+  onset_min_seconds: 1.5      # giật >= 1.5 giây ngay trước khi nằm ra = nằm ra do co giật, không phải chủ động
+  onset_lookback_seconds: 5.0
+  min_sample_hz: 8.0          # tốc độ phân tích tối thiểu để đo được nhịp giật
+
+# Kinematic feature reliability
+kinematics:
+  # Hips below this pose confidence = lower body not visible (person close to the camera / cropped):
+  # aspect ratio, torso angle and hip velocity are then ignored as fall / lying evidence
+  min_hip_confidence: 0.5
+  # Cúi nhặt đồ / ngồi xổm / quỳ / bò: thân đổ về trước nhưng CHÂN VẪN ĐỨNG ĐỠ NGƯỜI -> không phải nằm, không phải ngã
+  supported_min_torso_angle: 45.0 # chỉ xét khi thân đã đổ về trước >= 45 độ (người đứng thẳng chân cũng thẳng)
+  supported_leg_angle: 40.0       # đùi (hoặc cả chân) lệch khỏi phương thẳng đứng <= 40 độ...
+  supported_min_leg_drop: 0.4     # ...và gối / cổ chân thấp hơn hông >= 0.4 chiều dài thân
+
+# Ngữ cảnh khi nằm: phân biệt NẰM BÌNH THƯỜNG (ngủ, bấm điện thoại, trở mình) với DẤU HIỆU CẢNH BÁO.
+# Chỉ là hỗ trợ quyết định trên khung xương 2D, KHÔNG chẩn đoán: đột quỵ khi đang ngủ mà không cử động
+# thì video không thể phân biệt với giấc ngủ.
+lying_context:
+  enabled: true
+  horizontal_torso_angle: 60.0      # độ: thân nghiêng hơn mức này = đang nằm
+  horizontal_aspect_ratio: 1.05     # khung người rộng/cao lớn hơn = đang nằm
+  upright_torso_angle: 30.0         # độ: nhỏ hơn = đứng / ngồi thẳng...
+  upright_aspect_ratio: 0.8         # ...và khung người còn hẹp (ngã nghiêng làm khung bè ra trước)
+  # Cách nằm xuống: người chủ động nằm thường NGỒI / QUỲ trước; ngã thì đi thẳng từ ĐỨNG xuống sàn
+  standing_to_lying_seconds: 2.0    # từ thẳng người xuống nằm trong 2 giây mà KHÔNG thấy ngồi / quỳ trước = ĐỔ GỤC
+  seated_min_seconds: 0.8           # ngồi / quỳ ít nhất 0.8 giây rồi mới nằm = chủ động nằm
+  standing_thigh_length: 0.6        # gối thấp hơn hông >= 0.6 thân = chân duỗi thẳng (đứng)
+  standing_shin_length: 0.5         # cổ chân thấp hơn gối >= 0.5 thân = không phải quỳ
+  knee_above_hip_tolerance: 0.15    # gối cao hơn hông quá mức này = camera nhìn từ trên xuống, không đọc được tư thế chân
+  sudden_onset_seconds: 0.6         # không thấy chân: thân đổ từ 30° xuống 60° nhanh hơn mức này = đổ gục
+  sudden_onset_velocity: 1.2        # tốc độ hông rơi (chiều cao người / giây) = đổ gục (ngả lưng từ thế ngồi < 0.5)
+  activity_window_seconds: 10.0
+  motion_noise_floor: 0.02          # dao động khớp (đơn vị: chiều dài thân) coi là nhiễu
+  phone_hand_to_head: 0.9           # bàn tay cách mặt < 0.9 thân = đang cầm điện thoại trước mặt
+  phone_min_fraction: 0.6           # tay ở trước mặt >= 60% thời gian cửa sổ
+  phone_min_wrist_motion: 0.04      # tay phải cử động (vuốt / gõ), không phải gối đầu ngủ
+  reposition_motion: 0.25           # cả người cử động mạnh từng đợt ngắn = trở mình / lăn qua lăn lại
+  reposition_max_burst_seconds: 5.0 # cử động mạnh liên tục lâu hơn thì KHÔNG coi là trở mình
+  struggle_window_seconds: 30.0
+  struggle_min_attempts: 2          # >= 2 lần nửa ngồi dậy rồi ngã lại, không đứng lên được
+  struggle_min_raise_seconds: 1.0
+  asymmetry_min_motion: 0.15        # một bên người cử động rõ...
+  asymmetry_max_ratio: 0.25         # ...bên kia gần như bất động (< 25%)
+  asymmetry_min_seconds: 8.0        # kéo dài ít nhất 8 giây
+  floor_still_seconds: 600.0        # nằm im NGOÀI vùng giường/sofa 10 phút (chỉ khi đã khai báo vùng)
+  inherit_seconds: 30.0             # mất dấu rồi nhận lại người ở gần đó: giữ ngữ cảnh cũ
+  inherit_distance: 0.25
+  benign_action_cap: 0.30           # khi nằm bình thường: giới hạn điểm từ nhãn "lying/immobile"
+  warning_risk: 0.80                # dấu hiệu cảnh báo đơn lẻ: hiện BẤT THƯỜNG, chưa phát báo động (giữa 0.76 và 0.88)
+  escalated_warning_risk: 0.92      # dấu hiệu + đổ gục / nằm trên sàn: có thể phát báo động (> 0.88)
+  history_seconds: 60.0
+  roll_off_drop: 1.0                # lăn qua lăn lại: nhãn 'falling' bị bỏ qua, TRỪ KHI hông tụt thấp >= 1 thân (lăn rơi khỏi giường)
+  sudden_onset_rescue_seconds: 15.0 # nằm phịch xuống rồi bấm điện thoại / trở mình liên tục >= 15 giây = người tỉnh táo, nằm bình thường
+  # Chủ động nằm từ tư thế đứng: DỪNG LẠI đứng yên >= 1 giây rồi TỪ TỪ hạ người >= 1 giây
+  pause_min_seconds: 1.0
+  pause_max_motion: 0.06            # đứng yên: cả người dao động < 0.06 chiều dài thân
+  pause_max_tilt_change: 5.0        # ...và góc thân gần như không đổi (độ)
+  pause_max_translation: 0.10       # ...và không di chuyển trong khung hình (đang đi bộ thì không phải đứng yên)
+  deliberate_min_descent_seconds: 1.0 # tính từ lúc hết đứng yên tới lúc nằm hẳn (ngất thì hông rơi nhanh, bị bắt riêng)
+  pause_to_descent_max_seconds: 0.7 # phải bắt đầu hạ người ngay sau khi đứng yên (đi tiếp rồi vấp ngã thì KHÔNG tính)
+  rest_seated_seconds: 2.0          # đã ngồi nghỉ >= 2 giây thì việc loạng choạng trước đó không tính nữa
+  # Camera đặt cao làm chân người đang đứng trông ngắn như đang ngồi: chỉ tin là NGỒI khi người...
+  seated_max_translation: 0.15      # ...không di chuyển trong khung hình (đang đi thì không phải ngồi)
+  seated_max_height_ratio: 0.85     # ...và thấp hơn rõ rệt (<= 85%) so với lúc đứng trước đó
+  # Vùng giường / sofa theo camera, toạ độ tương đối 0..1 của khung hình (x, y), đa giác >= 3 điểm.
+  # Nằm trong vùng này luôn coi là bình thường (trừ khi có dấu hiệu cảnh báo): chỉ vẽ phủ MẶT ĐỆM / ghế,
+  # không lấn ra sàn trước giường.
+  # "main" = camera chính; camera thêm dùng id của nó. Ví dụ:
+  #   main:
+  #     - [[0.55, 0.45], [0.98, 0.45], [0.98, 0.95], [0.55, 0.95]]
+  rest_zones: {}
+
+# LUỒNG RIÊNG: DẤU HIỆU CẢNH BÁO ĐỘT QUỴ / BỆNH CẤP (tách khỏi luồng TÉ NGÃ, cảnh báo riêng "stroke_warning").
+# Chỉ mô tả dấu hiệu nhìn thấy được, KHÔNG chẩn đoán. Một dấu hiệu đơn lẻ: hiện BẤT THƯỜNG trên dashboard;
+# >= 2 dấu hiệu khác nhau trong 2 phút, hoặc đổ gục từ tư thế ngồi: phát báo động.
+stroke_signs:
+  enabled: true
+  gait_window_seconds: 2.0          # đo dáng đi trong 2 giây gần nhất (quay người / đi vòng quanh đồ đạc vẫn mượt)
+  min_upright_seconds: 1.2
+  sway_min: 0.12                    # hông lắc ngang (đã trừ quỹ đạo đi thẳng / đi vòng) <= 0.12 thân: bình thường
+  sway_full: 0.35                   # >= 0.35 thân: chắc chắn loạng choạng
+  tilt_min: 6.0                     # thân nghiêng dao động <= 6 độ: bình thường
+  tilt_full: 15.0
+  min_reversals: 2                  # phải lắc QUA LẠI >= 2 lần trong cửa sổ (bắt đầu bước đi / quay người / cúi chỉ đổi hướng 1 lần)
+  sway_min_speed: 0.3               # tốc độ lắc ngang tối thiểu để tính 1 lần đổi hướng (thân / giây)
+  tilt_min_speed: 15.0              # tốc độ nghiêng thân tối thiểu để tính 1 lần đổi hướng (độ / giây)
+  stagger_min_score: 0.5            # mức mất ổn định cần có...
+  stagger_model_min_prob: 0.30      # ...khi mô hình AI cũng thấy "stumbling"
+  stagger_kinematic_alone: 0.8      # ...hoặc mất ổn định rất rõ dù AI chưa thấy
+  stagger_min_seconds: 3.0          # loạng choạng liên tục >= 3 giây = dấu hiệu
+  pre_fall_seconds: 5.0             # loạng choạng trong 5 giây trước khi ngã = "loạng choạng rồi ngã"...
+  pre_fall_min_stagger_seconds: 1.0 # ...cộng dồn >= 1 giây (trượt chân chỉ chao đảo trong chốc lát)
+  gesture_min_prob: 0.60            # ôm đầu / ôm ngực / nôn (lớp abnormal_movement của AI)...
+  gesture_window_seconds: 2.0
+  gesture_min_seconds: 4.0          # ...kéo dài >= 4 giây
+  sign_hold_seconds: 10.0           # dấu hiệu còn tác dụng 10 giây sau lần cuối thấy
+  combo_window_seconds: 120.0       # các dấu hiệu khác nhau trong 2 phút được cộng dồn
+  combo_min_signs: 2
+  combo_risk: 0.92                  # >= 2 dấu hiệu: vượt ngưỡng báo động 0.88
+  sign_risk:                        # 1 dấu hiệu: điểm rủi ro luồng đột quỵ (dưới 0.88 = chỉ hiện cảnh báo)
+    staggering: 0.80
+    abnormal_gesture: 0.82
+    asymmetric_movement: 0.80
+    unsteady_before_fall: 0.82
+    collapse_from_sitting: 0.92     # đổ gục từ tư thế ngồi: báo động ngay cả khi chỉ có 1 dấu hiệu
+    convulsion: 0.92                # co giật: báo động ngay cả khi chỉ có 1 dấu hiệu
 
 alerts:
-  cooldown_seconds: 60.0        # Prevent repeated alarms within 60 seconds for same track
+  cooldown_seconds: 60.0        # Prevent repeated alarms within 60 seconds for same track (was 30)
   max_unacknowledged_alerts: 5
   auto_escalate_after_seconds: 180.0
   non_diagnostic_message: "Possible medical emergency / abnormal behavior detected. Please check the person."

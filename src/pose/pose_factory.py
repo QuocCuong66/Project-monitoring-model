@@ -2,6 +2,7 @@
 
 from typing import Callable, Dict, Any
 from src.pose.pose_estimator import PoseEstimator, YOLOv8PoseEstimator
+from src.pose.rtmo_estimator import RTMOPoseEstimator
 
 _POSE_REGISTRY: Dict[str, Callable[..., PoseEstimator]] = {}
 
@@ -16,6 +17,8 @@ def register_pose_estimator(name: str) -> Callable:
 
 register_pose_estimator("yolov8_pose")(YOLOv8PoseEstimator)
 register_pose_estimator("yolov11_pose")(YOLOv8PoseEstimator)
+register_pose_estimator("rtmo_s")(RTMOPoseEstimator)
+register_pose_estimator("rtmo_pose")(RTMOPoseEstimator)
 
 
 def create_pose_estimator(architecture: str = "yolov8_pose", **kwargs: Any) -> PoseEstimator:

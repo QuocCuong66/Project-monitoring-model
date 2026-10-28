@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 import requests
 from src.alerts.event_logger import AlertEvent
+from src.alerts.telegram import TelegramClient, TelegramSettings, load_telegram_settings
 from src.utils.config import get_env, get_project_root
 
 
@@ -17,14 +18,20 @@ class NotificationDispatcher:
         telegram_chat_id: Optional[str] = None,
         webhook_url: Optional[str] = None,
     ) -> None:
-        self.telegram_token = telegram_token or get_env("TELEGRAM_BOT_TOKEN")
-        self.telegram_chat_id = telegram_chat_id or get_env("TELEGRAM_CHAT_ID")
+        if telegram_token and telegram_chat_id:
+            self.telegram_settings = TelegramSettings(enabled=True, bot_token=telegram_token, chat_id=telegram_chat_id)
+        else:
+            self.telegram_settings = load_telegram_settings()
         self.webhook_url = webhook_url or get_env("WEBHOOK_URL")
         self._ws_subscribers: List[Callable[[AlertEvent], None]] = []
 
     def subscribe_websocket(self, callback: Callable[[AlertEvent], None]) -> None:
         """Register a WebSocket broadcast callback."""
         self._ws_subscribers.append(callback)
+
+    def update_telegram_settings(self, settings: TelegramSettings) -> None:
+        """Apply Telegram settings changed from the dashboard without restarting."""
+        self.telegram_settings = settings
 
     def dispatch(self, event: AlertEvent) -> None:
         """Dispatch event across all active notification channels."""
@@ -43,13 +50,15 @@ class NotificationDispatcher:
             self._send_webhook(event)
 
         # 4. Telegram Bot
-        if self.telegram_token and self.telegram_chat_id:
+        if self.telegram_settings.is_ready:
             self._send_telegram(event)
 
     def _log_to_console(self, event: AlertEvent) -> None:
         print("\n" + "=" * 70)
         print("🚨 EMERGENCY ALERT TRIGGERED 🚨")
         print(f"Event ID:   {event.event_id}")
+        if event.camera_name:
+            print(f"Camera:     {event.camera_name}")
         print(f"Person ID:  {event.person_id}")
         print(f"Timestamp:  {event.timestamp}")
         print(f"Risk Score: {event.risk_score:.2f}")
@@ -69,33 +78,35 @@ class NotificationDispatcher:
             print(f"[Warning] Webhook alert dispatch failed: {e}")
 
     def _send_telegram(self, event: AlertEvent) -> None:
+        settings = self.telegram_settings
         try:
+            # Camera names are typed by the user: escape Markdown so "Phòng_ngủ" cannot break the message
+            camera_line = ""
+            if event.camera_name:
+                safe_name = "".join("\\" + ch if ch in "_*`[" else ch for ch in event.camera_name)
+                camera_line = f"• *Camera:* {safe_name}\n"
+            heading = {
+                "fall": "🚨 *NGHI TÉ NGÃ — POSSIBLE FALL*",
+                "stroke_warning": "⚠️ *DẤU HIỆU CẢNH BÁO ĐỘT QUỴ / BỆNH CẤP — STROKE WARNING SIGNS*",
+            }.get(event.event_type, "🚨 *POSSIBLE MEDICAL EMERGENCY DETECTED*")
+            signs = event.evidence.get("stroke_signs") or []
+            signs_line = f"• *Signs:* `{', '.join(signs)}`\n" if event.event_type == "stroke_warning" and signs else ""
             msg_text = (
-                f"🚨 *POSSIBLE MEDICAL EMERGENCY DETECTED*\n\n"
+                f"{heading}\n\n"
+                f"{camera_line}"
+                f"{signs_line}"
                 f"• *Person ID:* `{event.person_id}`\n"
                 f"• *Risk Score:* `{event.risk_score:.2f}`\n"
                 f"• *Primary Action:* `{event.evidence.get('primary_action', 'unknown')}`\n"
                 f"• *Notice:* {event.message}\n"
             )
-
-            url = f"https://api.telegram.org/bot{self.telegram_token}/sendMessage"
-            requests.post(
-                url,
-                data={"chat_id": self.telegram_chat_id, "text": msg_text, "parse_mode": "Markdown"},
-                timeout=5.0,
-            )
+            client = TelegramClient(settings.bot_token)
+            client.send_message(settings.chat_id, msg_text, parse_mode="Markdown")
 
             # Upload snapshot image if available
             if event.snapshot_path:
                 abs_path = get_project_root() / event.snapshot_path
                 if abs_path.exists():
-                    photo_url = f"https://api.telegram.org/bot{self.telegram_token}/sendPhoto"
-                    with open(abs_path, "rb") as photo_file:
-                        requests.post(
-                            photo_url,
-                            data={"chat_id": self.telegram_chat_id, "caption": f"Snapshot Event: {event.event_id}"},
-                            files={"photo": photo_file},
-                            timeout=8.0,
-                        )
+                    client.send_photo(settings.chat_id, abs_path, caption=f"Snapshot Event: {event.event_id}")
         except Exception as e:
             print(f"[Warning] Telegram alert dispatch failed: {e}")

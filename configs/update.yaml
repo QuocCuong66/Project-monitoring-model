@@ -1,0 +1,20 @@
+# Cập nhật phiên bản mới (Cài đặt -> Cập nhật phiên bản)
+# Bản mới được lấy từ GitHub Releases của dự án; chỉ tải bộ cài từ các máy chủ GitHub bên dưới.
+
+update:
+  enabled: true
+  github_repo: "QuocCuong66/elderly-ai-installer"   # repo công khai chứa bộ cài (mã nguồn nằm ở repo riêng tư)
+  api_base: "https://api.github.com"
+  # File bộ cài trong release: tên chứa chuỗi này và kết thúc bằng .exe (ưu tiên tên cố định không kèm số phiên bản)
+  installer_asset_keyword: "_Setup"
+  preferred_asset_name: "Fall_and_Stroke_Warning_System_Setup.exe"
+  allowed_download_hosts:
+    - "github.com"
+    - "objects.githubusercontent.com"
+    - "release-assets.githubusercontent.com"
+  check_on_startup: true            # kiểm tra 1 lần khi khởi động (chạy nền, không làm chậm hệ thống)
+  cache_minutes: 60                 # không hỏi lại GitHub quá 1 lần / giờ (giới hạn 60 lượt / giờ của GitHub)
+  request_timeout_seconds: 15
+  max_installer_mb: 2048
+  # Bộ cài Inno Setup chạy im lặng, tự đóng ứng dụng cũ; sau đó ứng dụng được mở lại
+  installer_args: ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"]
