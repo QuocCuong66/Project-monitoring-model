@@ -25,7 +25,9 @@ def main() -> None:
     parser.add_argument("--no-display", action="store_true", help="Run in headless mode without GUI window")
     parser.add_argument("--loop", action="store_true", help="Loop video playback if source is video")
     parser.add_argument("--device", type=str, default=None, help="Compute device ('cuda' or 'cpu')")
+    parser.add_argument("--disable-motion-gating", action="store_true", help="Disable Tier-0 Motion Gating (forces AI inference on every frame)")
     args = parser.parse_args()
+
 
     # Load configuration
     cam_cfg = load_config("camera.yaml")
@@ -52,8 +54,11 @@ def main() -> None:
 
     # Initialize Pipeline
     print("[Info] Initializing Realtime AI Pipeline...")
-    pipeline = RealtimePipeline()
-    print("[Info] Pipeline initialized successfully. Monitoring active...")
+    from src.detection.motion_gater import MotionGater
+    motion_gater = MotionGater(enabled=not args.disable_motion_gating)
+    pipeline = RealtimePipeline(motion_gater=motion_gater)
+    print(f"[Info] Pipeline initialized successfully (Tier-0 Motion Gating: {'DISABLED' if args.disable_motion_gating else 'ENABLED'}). Monitoring active...")
+
 
     window_name = infer_cfg.get("display", {}).get("window_name", "Elderly AI Monitor")
 

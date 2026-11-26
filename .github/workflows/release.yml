@@ -1,0 +1,212 @@
+# Build bộ cài Windows trên GitHub Actions, ký số qua SignPath Foundation và phát hành lên GitHub Releases.
+#
+# Kích hoạt: push tag dạng v0.1.1 (phải trùng version trong pyproject.toml), hoặc chạy tay (workflow_dispatch).
+#
+# Ký số chỉ chạy khi đã cấu hình SignPath:
+#   Secret   SIGNPATH_API_TOKEN
+#   Variable SIGNPATH_ORGANIZATION_ID
+#   Variable SIGNPATH_PROJECT_SLUG          (vd: Project-monitoring-model)
+#   Variable SIGNPATH_SIGNING_POLICY_SLUG   (vd: release-signing)
+# Chưa cấu hình -> vẫn build, bản chưa ký chỉ được lưu làm artifact để thử, KHÔNG phát hành.
+
+name: Build & Release Installers (Windows + macOS)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  APP: Fall_and_Stroke_Warning_System
+  NO_PAUSE: "1"
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Đọc version và kiểm tra khớp với tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME không khớp version v$version trong pyproject.toml"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          $signing = if ("${{ vars.SIGNPATH_ORGANIZATION_ID }}") { "true" } else { "false" }
+          "signing=$signing" >> $env:GITHUB_OUTPUT
+
+      - name: Cài môi trường .venv
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python.exe -m pip install --upgrade pip
+          .venv\Scripts\python.exe -m pip install -r requirements.txt pyinstaller
+
+      - name: Cài Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Bước 1 — PyInstaller
+        shell: cmd
+        run: Build_App_PyInstaller.bat app
+
+      # --- Ký file .exe của ứng dụng (trước khi đóng gói vào bộ cài) ---
+      - name: Upload exe chưa ký
+        if: steps.version.outputs.signing == 'true'
+        id: upload-app
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-exe-unsigned
+          path: dist/${{ env.APP }}/${{ env.APP }}.exe
+          if-no-files-found: error
+
+      - name: Ký exe ứng dụng qua SignPath
+        if: steps.version.outputs.signing == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: app-exe
+          github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/${{ env.APP }}
+
+      - name: Bước 2 — Inno Setup
+        shell: cmd
+        run: Build_App_PyInstaller.bat installer
+
+      - name: Đổi tên bộ cài sang tên cố định
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item "dist\${env:APP}_Setup_v${{ steps.version.outputs.version }}.exe" "release\${env:APP}_Setup.exe"
+
+      # --- Ký bộ cài ---
+      - name: Upload bộ cài chưa ký
+        id: upload-installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: release/${{ env.APP }}_Setup.exe
+          if-no-files-found: error
+
+      - name: Ký bộ cài qua SignPath
+        if: steps.version.outputs.signing == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: release
+
+      - name: Kiểm tra chữ ký
+        if: steps.version.outputs.signing == 'true'
+        shell: pwsh
+        run: |
+          foreach ($file in @("dist\$env:APP\$env:APP.exe", "release\${env:APP}_Setup.exe")) {
+            $sig = Get-AuthenticodeSignature $file
+            Write-Host "$file -> $($sig.Status) ($($sig.SignerCertificate.Subject))"
+            if ($sig.Status -ne "Valid") { throw "$file chưa được ký hợp lệ" }
+          }
+
+      - name: Phát hành lên GitHub Releases
+        if: steps.version.outputs.signing == 'true' && github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $asset = "release\${env:APP}_Setup.exe"
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $asset --clobber
+          } else {
+            gh release create $tag $asset --title "Fall & Stroke Warning $tag" --notes "Tải bộ cài Windows: **${env:APP}_Setup.exe** bên dưới (đã ký số)."
+          }
+
+  # Bản macOS (Apple Silicon, .dmg). Chưa ký Developer ID / notarize: lần đầu mở cần
+  # chuột phải -> Open (hoặc System Settings -> Privacy & Security -> Open Anyway).
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Đọc version và kiểm tra khớp với tag
+        id: version
+        run: |
+          version=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "Tag $GITHUB_REF_NAME không khớp version v$version trong pyproject.toml"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cài môi trường .venv
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements-macos.txt pyinstaller
+
+      - name: Tạo icon .icns từ app_icon.png
+        run: |
+          mkdir app_icon.iconset
+          for s in 16 32 128 256 512; do
+            sips -z $s $s app_icon.png --out app_icon.iconset/icon_${s}x${s}.png >/dev/null
+            sips -z $((s*2)) $((s*2)) app_icon.png --out app_icon.iconset/icon_${s}x${s}@2x.png >/dev/null
+          done
+          iconutil -c icns app_icon.iconset -o app_icon.icns
+
+      - name: PyInstaller (.app)
+        run: .venv/bin/pyinstaller --noconfirm --clean fall_and_stroke_monitor.spec
+
+      - name: Ký ad-hoc và đóng gói .dmg
+        run: |
+          codesign --force --deep --sign - "dist/${APP}.app"
+          mkdir dmg && cp -R "dist/${APP}.app" dmg/ && ln -s /Applications dmg/Applications
+          mkdir -p release
+          hdiutil create -volname "Fall & Stroke Warning" -srcfolder dmg -ov -format UDZO "release/${APP}_macOS.dmg"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: release/${{ env.APP }}_macOS.dmg
+          if-no-files-found: error
+
+      - name: Phát hành lên GitHub Releases
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="release/${APP}_macOS.dmg"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "Fall & Stroke Warning $GITHUB_REF_NAME" --notes "Windows: **${APP}_Setup.exe** · macOS (Apple Silicon): **${APP}_macOS.dmg**" \
+            || true
+          gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
+

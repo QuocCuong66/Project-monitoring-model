@@ -1,0 +1,55 @@
+# Security Configuration — Fall & Stroke Warning System
+# Cấu hình bảo mật toàn diện cho hệ thống giám sát
+
+auth:
+  enabled: true                         # Bật xác thực bảo vệ mạng
+  allow_localhost_unauthenticated: true  # Máy tính chạy hệ thống (127.0.0.1, không qua proxy/tunnel) được vào thẳng
+  require_lan_auth: true                # Thiết bị lạ từ mạng nội bộ (Wi-Fi/LAN) bắt buộc phải có mật khẩu mới vào được!
+  jwt_algorithm: "HS256"
+  access_token_expire_minutes: 60       # Token truy cập ngắn hạn; trình duyệt tự gia hạn bằng refresh token
+  refresh_token_expire_days: 30         # Sau 30 ngày không dùng phải đăng nhập lại. Đổi mật khẩu / Đăng xuất thu hồi ngay mọi token
+  # jwt_secret_key: Tự động sinh khi chạy lần đầu, lưu tại %APPDATA%/FallStrokeWarning/secret.key
+  # Tài khoản admin đầu tiên chỉ tạo được trên chính máy chạy hệ thống (giao diện tại localhost),
+  # hoặc bằng lệnh trên máy chủ (cloud):  python -m src.auth.cli create-admin <ten_dang_nhap>
+
+  # Chống DNS rebinding: chỉ nhận yêu cầu gửi tới tên của chính máy này (localhost, tên máy, IP của máy).
+  # Truy cập bằng tên miền khác (DDNS, tên miền cloud, tunnel) thì khai báo ở đây
+  # hoặc biến môi trường ALLOWED_HOSTS="tenmien1.com,tenmien2.ddns.net"
+  host_check: true
+  allowed_hosts: []
+
+  # Danh sách route KHÔNG cần đăng nhập (public endpoints)
+  public_paths:
+    - "/health"
+    - "/api/auth/login"
+    - "/api/auth/setup"
+    - "/api/auth/status"
+    - "/api/auth/refresh"
+    - "/"
+    - "/styles.css"
+    - "/app.js"
+    - "/favicon.ico"
+    - "/icon.png"
+    - "/logo.png"
+    - "/apple-touch-icon.png"
+    - "/static"
+    - "/huong-dan.html"
+    - "/guide"
+
+cors:
+  # Cho phép các nguồn tin cậy kết nối đến API (ngoài chính trang dashboard)
+  allowed_origins:
+    - "http://127.0.0.1:8000"
+    - "http://localhost:8000"
+    - "https://127.0.0.1:8000"
+    - "https://localhost:8000"
+
+ssl:
+  enabled: false                        # Đổi thành true để kích hoạt HTTPS (https://) và WebSocket an toàn (wss://)
+  certfile: "configs/cert.pem"
+  keyfile: "configs/key.pem"
+  auto_generate: true                   # Tự động sinh chứng chỉ SSL tự ký nếu chưa có
+
+rate_limit:
+  enabled: true
+  login: "5/minute"                     # Tối đa 5 lần thử đăng nhập / tạo tài khoản / gia hạn mỗi phút cho mỗi địa chỉ IP

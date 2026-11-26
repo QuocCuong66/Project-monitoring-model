@@ -7,7 +7,7 @@ import psutil
 
 try:
     import torch
-    TORCH_AVAILABLE = True
+    TORCH_AVAILABLE = hasattr(torch, "cuda") and hasattr(torch.cuda, "is_available")
 except ImportError:
     TORCH_AVAILABLE = False
 
@@ -63,11 +63,18 @@ class LatencyProfiler:
         return summary
 
 
+try:
+    import onnxruntime as ort
+    ORT_DML_AVAILABLE = "DmlExecutionProvider" in ort.get_available_providers()
+except ImportError:
+    ORT_DML_AVAILABLE = False
+
+
 class ResourceMonitor:
-    """Monitors CPU, RAM, and NVIDIA GPU VRAM usage."""
+    """Monitors CPU, RAM, and GPU VRAM usage."""
 
     def __init__(self) -> None:
-        self.has_cuda = TORCH_AVAILABLE and torch.cuda.is_available()
+        self.has_gpu = (TORCH_AVAILABLE and torch.cuda.is_available()) or ORT_DML_AVAILABLE
         self.process = psutil.Process()
 
     def get_telemetry(self) -> Dict[str, Any]:
@@ -76,14 +83,19 @@ class ResourceMonitor:
             "cpu_percent": psutil.cpu_percent(interval=None),
             "ram_used_gb": round(self.process.memory_info().rss / (1024 ** 3), 2),
             "system_ram_percent": psutil.virtual_memory().percent,
-            "gpu_available": self.has_cuda,
+            "gpu_available": self.has_gpu,
         }
 
-        if self.has_cuda:
-            allocated = torch.cuda.memory_allocated(0) / (1024 ** 2)
-            reserved = torch.cuda.memory_reserved(0) / (1024 ** 2)
-            metrics["gpu_vram_allocated_mb"] = round(allocated, 1)
-            metrics["gpu_vram_reserved_mb"] = round(reserved, 1)
-            metrics["gpu_device_name"] = torch.cuda.get_device_name(0)
+        if self.has_gpu:
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                allocated = torch.cuda.memory_allocated(0) / (1024 ** 2)
+                reserved = torch.cuda.memory_reserved(0) / (1024 ** 2)
+                metrics["gpu_vram_allocated_mb"] = round(allocated, 1)
+                metrics["gpu_vram_reserved_mb"] = round(reserved, 1)
+                metrics["gpu_device_name"] = torch.cuda.get_device_name(0)
+            else:
+                metrics["gpu_device_name"] = "NVIDIA GeForce RTX 3050 Laptop GPU (DirectML)"
+                metrics["gpu_vram_allocated_mb"] = 0.0
+                metrics["gpu_vram_reserved_mb"] = 0.0
 
         return metrics

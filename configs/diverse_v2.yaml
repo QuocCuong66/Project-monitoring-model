@@ -1,0 +1,83 @@
+sources:
+  caucafall:
+    filename: Cauca_fall.zip
+    url: https://zenodo.org/api/records/17170592/files/Cauca_fall.zip/content
+    md5: 5a1899fe0022c9c4c0d37ce64ac0c986
+    train_subjects: [1, 2, 3, 4, 5, 6]
+    val_subjects: [7, 8]
+    test_subjects: [9, 10]
+  gmdcsa24:
+    filename: GMDCSA24.zip
+    url: https://zenodo.org/api/records/17170592/files/GMDCSA24.zip/content
+    md5: 920bfdda892244c4d9f3c405bce41267
+    train_subjects: [1, 2]
+    val_subjects: [3]
+    test_subjects: [4]
+  edf:
+    filename: EDF.zip
+    url: https://zenodo.org/api/records/17170592/files/EDF.zip/content
+    md5: a45b3b84f329b00817db31634f92c6e1
+    train_subjects: [1, 2, 3]
+    val_subjects: [4]
+    test_subjects: [5]
+    overlong_tail_export: true  # Verified by matching overlapping frames across clips.
+  oops:
+    filename: OOPS_1k.zip
+    url: https://zenodo.org/api/records/17170592/files/OOPS_1k.zip/content
+    md5: 52ccdcfaf8832a8845ec6a070b8bd917
+    test_only: true
+    audit_only: true  # Excluded before fitting: conflicting copies/missing files/time mismatch.
+dataset:
+  raw_dir: data/raw/diverse_v2
+  extracted_dir: data/videos/diverse_v2
+  pose_dir: data/poses/diverse_v2
+  processed_dir: data/processed/diverse_v2
+  download_workers: 4
+  timeout_seconds: 90
+preparation:
+  target_fps: 15
+  window_size: 30
+  windows_per_clip: 4
+  keypoint_confidence: 0.3
+  min_visible_joints: 6
+  min_valid_fraction: 0.7
+  pose_model_config: configs/model.yaml
+  pose_device: cuda
+  pose_cpu_threads: 2
+  person_confidence: 0.35
+  max_multiple_person_fraction: 0.15
+  media_duration_tolerance_seconds: 0.15
+  source_class_map:
+    0: [walking]
+    1: [falling]
+    2: [lying]
+    3: [sitting]
+    4: [sitting]
+    5: [sitting, lying, bending]
+    6: [lying]
+    7: [getting_up]
+    8: [standing]
+  skip_other_label: 9
+training:
+  output: models/checkpoints/diverse_v2.pt
+  seed: 271
+  epochs: 30
+  patience: 8
+  batch_size: 128
+  draws_per_epoch: 18000
+  learning_rate: 0.000025
+  distillation_weight: 1.0
+  old_training_fraction: 0.55
+  blend_grid: [1.0, 0.75, 0.5, 0.25, 0.1]
+  preserve_posture_ratio: true
+  max_old_fall_recall_drop: 0.005
+  max_old_lying_recall_drop: 0.01
+  max_old_immobile_recall_drop: 0.02
+  max_old_emergency_recall_drop: 0.01
+  max_old_normal_fpr_increase: 0.0
+  max_native_fall_recall_drop: 0.0
+  min_native_normal_fpr_reduction: 0.10
+integration:
+  active_weights: models/checkpoints/best_st_transformer.onnx
+  baseline_dir: models/checkpoints/diverse_v2_baseline
+  max_model_p95_ms: 25

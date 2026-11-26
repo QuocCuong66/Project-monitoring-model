@@ -1,0 +1,64 @@
+sources:
+  ntu120:
+    url: https://download.openmmlab.com/mmaction/v1.0/skeleton/data/ntu120_2d.pkl
+    path: data/raw/rgb_expansion/ntu120_2d.pkl
+  ucf101:
+    url: https://download.openmmlab.com/mmaction/v1.0/skeleton/data/ucf101_2d.pkl
+    path: data/raw/rgb_expansion/ucf101_2d.pkl
+  hmdb51:
+    url: https://download.openmmlab.com/mmaction/v1.0/skeleton/data/hmdb51_2d.pkl
+    path: data/raw/rgb_expansion/hmdb51_2d.pkl
+    label_map_url: https://raw.githubusercontent.com/open-mmlab/mmaction2/main/tools/data/hmdb51/label_map.txt
+    label_map_path: data/raw/rgb_expansion/hmdb51_labels.txt
+preparation:
+  seed: 137
+  window_size: 30
+  sample_stride: 2
+  windows_per_clip: 3
+  min_visible_joints: 6
+  min_valid_fraction: 0.7
+  keypoint_confidence: 0.3
+  target_fps: 15
+  source_fps: {ntu120: 30, ucf101: 25, hmdb51: 30}
+  new_validation_subjects: [45, 57, 74, 78, 94]
+  ucf_classes: [BabyCrawling, BodyWeightSquats, FloorGymnastics, HandstandPushups, HandstandWalking, JumpingJack, Lunges, MoppingFloor, PushUps, TaiChi, WallPushups]
+  hmdb_classes: [cartwheel, flic_flac, handstand, pushup, sit, situp, somersault]
+  exercise_classes: [walking, standing, sitting, lying, bending, getting_up]
+  max_old_train_per_class: 2000
+  upfall_dir: data/raw/upfall
+  upfall_crop_size: [500, 700]
+  upfall_train_subjects: [1, 2, 3]
+  upfall_val_subjects: [4]
+  upfall_test_subjects: [5]
+  upfall_coco_indices: [0, 2, 5, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
+training:
+  baseline: models/checkpoints/best_st_transformer.pt
+  initialize: models/checkpoints/best_st_transformer.pt
+  output: models/checkpoints/rgb_expanded.pt
+  epochs: 20
+  batch_size: 128
+  learning_rate: 0.00005
+  distillation_weight: 0.25
+  seed: 137
+  cpu_threads: 4
+  epoch_samples: 24000
+  patience: 6
+  source_weights: {ntu60: 0.55, ntu120: 0.20, ucf101: 0.07, hmdb51: 0.03, urfd: 0.10, upfall: 0.05}
+  blend_grid: [1.0, 0.75, 0.5, 0.25, 0.1]
+  preserve_posture_ratio: true
+  monitor:
+    max_fall_recall_drop: 0.01
+    max_emergency_recall_drop: 0.02
+    max_normal_fpr_increase: 0.0
+    max_macro_f1_drop: 0.01
+    max_upfall_recall_drop: 0.0
+    max_lying_recall_drop: 0.02
+    max_immobile_recall_drop: 0.02
+integration:
+  active_weights: models/checkpoints/best_st_transformer.onnx
+  backup_dir: models/checkpoints/backups
+  normal_activity_policy:
+    enabled: true
+    min_probability: 0.90
+    max_drop_severity: 0.35
+    max_downward_velocity: 1.0

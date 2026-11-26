@@ -95,3 +95,100 @@ class FaceBlurrer:
             frame[y1:y2, x1:x2] = blurred_roi
 
         return frame
+
+
+HEAD_KEYPOINTS = (0, 1, 2, 3, 4)  # COCO: nose, eyes, ears
+
+
+def _head_boxes(
+    keypoints: Optional[np.ndarray],
+    bbox: Tuple[float, float, float, float],
+    frame_shape: Tuple[int, ...],
+    kp_conf: float = 0.3,
+) -> List[Tuple[int, int, int, int]]:
+    """Regions that may show a face: around the facial keypoints and the top of the person box.
+
+    Both are returned (over-masking is preferred to leaking a face): keypoints miss heads
+    seen from behind, and the box top misses heads of people lying sideways.
+    """
+    h, w = frame_shape[:2]
+    bx1, by1, bx2, by2 = bbox
+    person_h = max(1.0, by2 - by1)
+    person_w = max(1.0, bx2 - bx1)
+    boxes: List[Tuple[float, float, float, float]] = []
+    if keypoints is not None and len(keypoints) >= 5:
+        pts = np.array([keypoints[i, :2] for i in HEAD_KEYPOINTS if keypoints[i, 2] > kp_conf], dtype=np.float32)
+        if len(pts):
+            cx, cy = pts.mean(axis=0)
+            spread = float(np.max(np.ptp(pts, axis=0))) if len(pts) > 1 else 0.0
+            # Head ~ 1/7 of body height; cap so a bad keypoint cannot smear across the frame
+            half = float(np.clip(spread * 0.9, max(person_h, person_w) * 0.09, max(person_h, person_w) * 0.2))
+            half = max(half, 12.0)
+            boxes.append((cx - half, cy - half * 1.3, cx + half, cy + half))
+        # Head seen from behind / from above: no facial keypoints, but it sits on or just above
+        # the shoulders (overlapping them in top-down ceiling and doorbell views)
+        shoulders = [keypoints[i, :2] for i in (5, 6) if keypoints[i, 2] > kp_conf]
+        if shoulders:
+            sx, sy = np.mean(shoulders, axis=0)
+            width = float(np.linalg.norm(shoulders[0] - shoulders[1])) if len(shoulders) == 2 else 0.0
+            half = max(width * 0.9, max(person_h, person_w) * 0.09, 12.0)
+            boxes.append((sx - half, sy - half * 2.0, sx + half, sy + half * 0.6))
+    boxes.append((bx1, by1, bx2, by1 + person_h * 0.25))
+    out = []
+    for x1, y1, x2, y2 in boxes:
+        x1, y1 = max(0, int(x1)), max(0, int(y1))
+        x2, y2 = min(w, int(x2)), min(h, int(y2))
+        if x2 > x1 and y2 > y1:
+            out.append((x1, y1, x2, y2))
+    return out
+
+
+def anonymize_people(
+    frame: np.ndarray,
+    people: List[Tuple[Optional[np.ndarray], Tuple[float, float, float, float]]],
+    block: int = 6,
+) -> np.ndarray:
+    """Return a copy of the frame with every person's head pixelated beyond recognition.
+
+    Args:
+        frame: BGR image.
+        people: (keypoints (17, 3) or None, bbox x1y1x2y2) per person. Pass the raw detections
+            of this exact frame as well as tracks: tracker boxes and smoothed keypoints lag.
+        block: Pixels per side of the coarse mosaic (smaller = coarser = stronger).
+    """
+    out = frame.copy()
+    for keypoints, bbox in people:
+        for x1, y1, x2, y2 in _head_boxes(keypoints, bbox, out.shape):
+            roi = out[y1:y2, x1:x2]
+            small = cv2.resize(roi, (block, block), interpolation=cv2.INTER_AREA)
+            out[y1:y2, x1:x2] = cv2.resize(small, (x2 - x1, y2 - y1), interpolation=cv2.INTER_NEAREST)
+    return out
+
+
+def _iou(a: Tuple[float, float, float, float], b: Tuple[float, float, float, float]) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def anonymize_alert_snapshot(
+    frame: np.ndarray,
+    detections: List[Tuple[Optional[np.ndarray], Tuple[float, float, float, float]]],
+    tracks: List[Tuple[Optional[np.ndarray], Tuple[float, float, float, float]]],
+    alerted_bbox: Tuple[float, float, float, float],
+    min_iou: float = 0.1,
+) -> np.ndarray:
+    """Evidence snapshot that never shows a recognisable face.
+
+    Heads of every detected / tracked person are pixelated. When the alerted person is not
+    found among this frame's raw detections (occluded, cut off, mid-fall motion blur), the
+    tracker box may have drifted and their head cannot be located, so the whole frame is
+    pixelated instead: the scene stays readable but nobody is identifiable.
+    """
+    if not any(_iou(bbox, alerted_bbox) >= min_iou for _, bbox in detections):
+        h, w = frame.shape[:2]
+        small = cv2.resize(frame, (max(1, w // 24), max(1, h // 24)), interpolation=cv2.INTER_AREA)
+        return cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+    return anonymize_people(frame, detections + tracks)

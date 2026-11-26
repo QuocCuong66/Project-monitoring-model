@@ -1,0 +1,30 @@
+# Ultra-Lightweight ONNX Runtime & Computer Vision Stack (~700MB)
+# Note: Inference runs purely on ONNX Runtime without heavy PyTorch (4.3GB) or TensorRT (3.2GB).
+# macOS build: inference runs on CPU (ONNX Runtime picks only available providers).
+# Same as requirements.txt but with the plain onnxruntime wheel (DirectML is Windows-only).
+onnxruntime>=1.16.0
+opencv-contrib-python>=4.8.0
+numpy>=1.24.0,<2.0.0
+scipy>=1.10.0
+filterpy>=1.4.5
+protobuf>=3.20.0
+
+# Web API & Streaming Dashboard
+fastapi>=0.100.0
+uvicorn>=0.22.0
+websockets>=11.0
+pydantic>=2.0.0
+httpx>=0.24.0
+
+# Authentication & Security (login, JWT, brute-force limits, HTTPS certificate)
+PyJWT>=2.8.0
+bcrypt>=4.0.0
+slowapi>=0.1.9
+cryptography>=41.0.0
+
+# Configuration & Hardware Telemetry
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+requests>=2.28.0
+tqdm>=4.65.0
+psutil>=5.9.0

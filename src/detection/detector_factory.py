@@ -24,13 +24,20 @@ class RTDETRPersonDetector(PersonDetector):
     """RT-DETR implementation via Ultralytics."""
 
     def __init__(self, model_path: str = "rtdetr-l.pt", conf_threshold: float = 0.40, device: str = "cuda", **kwargs) -> None:
-        from ultralytics import RTDETR
-        import torch
-        if device == "cuda" and not torch.cuda.is_available():
+        self.conf_threshold = conf_threshold
+        try:
+            import torch
+            has_cuda = torch.cuda.is_available()
+        except ImportError:
+            has_cuda = False
+        if device == "cuda" and not has_cuda:
             device = "cpu"
         self.device = device
-        self.conf_threshold = conf_threshold
-        self.model = RTDETR(model_path)
+        try:
+            from ultralytics import RTDETR
+            self.model = RTDETR(model_path)
+        except Exception:
+            self.model = None
 
     def detect(self, frame):
         results = self.model.predict(source=frame, conf=self.conf_threshold, classes=[0], device=self.device, verbose=False)

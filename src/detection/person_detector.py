@@ -27,8 +27,18 @@ class YOLOv8PersonDetector(PersonDetector):
         self.model_path = str(model_path)
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
-        import torch
-        if device == "cuda" and not torch.cuda.is_available():
+        try:
+            import torch
+            has_cuda = torch.cuda.is_available()
+        except ImportError:
+            has_cuda = False
+            try:
+                import onnxruntime as ort
+                has_cuda = "CUDAExecutionProvider" in ort.get_available_providers()
+            except ImportError:
+                has_cuda = False
+
+        if device == "cuda" and not has_cuda:
             device = "cpu"
         self.device = device
         self.half = half and (device != "cpu")
