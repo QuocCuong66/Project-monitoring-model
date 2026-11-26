@@ -68,6 +68,11 @@ temporal:
   num_layers: 4
   num_heads: 4
   dropout: 0.15
+  normal_activity_policy:
+    enabled: true
+    min_probability: 0.9
+    max_drop_severity: 0.35
+    max_downward_velocity: 1.0
 
 anomaly:
   architecture: "pose_autoencoder"

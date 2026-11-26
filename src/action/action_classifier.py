@@ -71,9 +71,17 @@ class ActionClassifier:
         device: str = "cuda",
         num_classes: int = 10,
         architecture: str = "tcn",
+        normal_activity_policy: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.num_classes = num_classes
         self.architecture = architecture.lower()
+        self.normal_activity_policy = dict(normal_activity_policy or {})
+        if self.normal_activity_policy.get("enabled", False):
+            policy = self.normal_activity_policy
+            if not (0.0 <= float(policy["min_probability"]) <= 1.0
+                    and 0.0 <= float(policy["max_drop_severity"]) <= 1.0
+                    and float(policy["max_downward_velocity"]) > 0.0):
+                raise ValueError("Invalid normal activity policy thresholds")
         self.has_weights = False
         self.ort_session = None
         self.is_onnx = False
@@ -162,7 +170,12 @@ class ActionClassifier:
             conf = float(np.max(probs))
             # If the neural net is unconfident (e.g. uniform ~0.10 across classes),
             # blend with or defer to biomechanical kinematic estimation
-            if conf < 0.35:
+            if self._trust_normal_activity(probs, kinematics):
+                # The model may be uncertain between several benign activities
+                # while strongly rejecting emergency classes. Posture alone must
+                # not turn this learned evidence into an immobility alarm.
+                pass
+            elif conf < 0.35:
                 heuristic_probs = self._heuristic_predict(sequence, kinematics)
                 probs = 0.85 * heuristic_probs + 0.15 * probs
             elif kinematics is not None:
@@ -195,6 +208,16 @@ class ActionClassifier:
             emergency_prob=min(1.0, emergency_prob),
             severity_score=severity,
         )
+
+    def _trust_normal_activity(self, probs: np.ndarray, kinematics: Optional[Any]) -> bool:
+        policy = self.normal_activity_policy
+        if not policy.get("enabled", False) or kinematics is None:
+            return False
+        safe_names = ("walking", "standing", "sitting", "lying", "bending", "getting_up")
+        safe_mass = float(sum(probs[ACTION_CLASSES.index(name)] for name in safe_names))
+        return (safe_mass >= float(policy["min_probability"])
+                and float(getattr(kinematics, "drop_severity_score", 0.0)) < float(policy["max_drop_severity"])
+                and float(getattr(kinematics, "vertical_velocity", 0.0)) < float(policy["max_downward_velocity"]))
 
     def _fuse_kinematics_with_probs(self, probs: np.ndarray, kinematics: Any) -> np.ndarray:
         """Physically calibrate model probabilities using biomechanical ground-truth."""

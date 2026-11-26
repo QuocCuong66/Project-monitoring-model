@@ -130,7 +130,7 @@ def initialize_camera_stream(
 
         width = camera_cfg.get("webcam", {}).get("width", 1280)
         height = camera_cfg.get("webcam", {}).get("height", 720)
-        fps = camera_cfg.get("webcam", {}).get("fps", 30)
+        fps = camera_cfg.get("fps", camera_cfg.get("webcam", {}).get("fps", 15))
         api_pref = camera_cfg.get("webcam", {}).get("api_preference", "dshow")
         stream = WebcamStream(device_index=w_idx, width=width, height=height, fps=fps, api_preference=api_pref)
 
@@ -157,7 +157,7 @@ def initialize_camera_stream(
     if not stream.start():
         print("  [Warning] Không thể mở camera trực tiếp. Khởi tạo SyntheticCameraStream giả lập để kiểm thử.")
         from src.camera.synthetic import SyntheticCameraStream
-        stream = SyntheticCameraStream(width=1280, height=720, fps=30)
+        stream = SyntheticCameraStream(width=1280, height=720, fps=fps)
         stream.start()
 
     print(f"  • Video Ingestion Worker: [READY] (Target FPS: {stream.get_fps():.0f})")
@@ -301,6 +301,7 @@ def main() -> None:
                 src_name = f"Webcam {args.device_index}" if args.source == "webcam" else (f"RTSP Stream" if args.source == "rtsp" else "Video File")
                 srv.current_camera_info.update({
                     "source_type": args.source,
+                    "fps": int(stream.get_fps()),
                     "device_index": args.device_index,
                     "rtsp_url": args.rtsp_url,
                     "video_path": args.video_path,

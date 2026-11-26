@@ -137,6 +137,7 @@ current_camera_info: Dict[str, Any] = {
     "video_path": None,
     "name": "Webcam 0 (Mặc định)",
     "is_fallback": False,
+    "fps": 15,
 }
 
 
@@ -145,6 +146,7 @@ class CameraStartRequest(BaseModel):
     device_index: int = 0
     rtsp_url: Optional[str] = None
     video_path: Optional[str] = None
+    fps: int = 15
 
 
 class CameraSwitchRequest(BaseModel):
@@ -155,7 +157,12 @@ class CameraSwitchRequest(BaseModel):
     rtsp_username: Optional[str] = None
     rtsp_password: Optional[str] = None
     video_path: Optional[str] = None
+    fps: int = 15
     save_as_default: bool = False
+
+
+class CameraFpsRequest(BaseModel):
+    fps: int
 
 
 class CameraTestRequest(BaseModel):
@@ -322,6 +329,7 @@ def system_status() -> Dict[str, Any]:
     return {
         "camera_active": running,
         "current_fps": round(fps, 1),
+        "target_fps": current_camera_info.get("fps", 15),
         "tracked_persons_count": tracks_count,
         "camera_connection": _connection_status(),  # network cameras only (state / reconnect attempts)
         "extra_cameras_online": sum(1 for c in extras if c.get("online")),
@@ -355,6 +363,31 @@ def get_camera_info() -> Dict[str, Any]:
             "connection": _connection_status(),
         })
     return info
+
+
+@app.get("/camera/fps")
+def get_camera_fps() -> Dict[str, Any]:
+    with state_lock:
+        fps = current_camera_info.get("fps", 15)
+    return {"fps": fps, "options": [10, 15, 30], "default": 15}
+
+
+@app.post("/camera/fps")
+def set_camera_fps(req: CameraFpsRequest) -> Dict[str, Any]:
+    if req.fps not in (10, 15, 30):
+        raise HTTPException(status_code=400, detail="FPS phải là 10, 15 hoặc 30.")
+    with state_lock:
+        previous = current_camera_info.get("fps", 15)
+        try:
+            if camera_stream is not None and hasattr(camera_stream, "set_fps"):
+                camera_stream.set_fps(req.fps)
+            save_user_camera_settings({"fps": req.fps})
+        except Exception as error:
+            if camera_stream is not None and hasattr(camera_stream, "set_fps"):
+                camera_stream.set_fps(previous)
+            raise HTTPException(status_code=503, detail="Không lưu được FPS. Vui lòng thử lại.") from error
+        current_camera_info["fps"] = req.fps
+    return {"status": "success", "fps": req.fps, "message": f"Đã chuyển FPS sang {req.fps}"}
 
 
 @app.post("/camera/switch")
@@ -397,16 +430,18 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
         friendly_name = ""
 
         try:
+            target_fps = int(req.fps) if req.fps in (10, 15, 30) else 15
             if req.source_type == "webcam":
                 cam_cfg = load_config("camera.yaml")
                 api_pref = cam_cfg.get("webcam", {}).get("api_preference", "dshow")
-                new_stream = WebcamStream(device_index=req.device_index, api_preference=api_pref)
+                new_stream = WebcamStream(device_index=req.device_index, fps=target_fps, api_preference=api_pref)
                 friendly_name = f"Webcam {req.device_index}"
             elif req.source_type == "rtsp":
                 new_stream = RTSPStream.from_config(req.rtsp_url)
+                new_stream.set_fps(target_fps)
                 friendly_name = f"IP Camera ({mask_url(req.rtsp_url)})"
             elif req.source_type == "video":
-                new_stream = VideoFileStream(video_path=req.video_path, loop=True)
+                new_stream = VideoFileStream(video_path=req.video_path, loop=True, fps=float(target_fps))
                 friendly_name = f"Video ({Path(req.video_path).name})"
             else:
                 raise HTTPException(status_code=400, detail=f"Loại nguồn không hỗ trợ: {req.source_type}")
@@ -420,7 +455,7 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
                 else:
                     # Fallback to synthetic if hardware webcam fails
                     from src.camera.synthetic import SyntheticCameraStream
-                    new_stream = SyntheticCameraStream(width=1280, height=720, fps=30)
+                    new_stream = SyntheticCameraStream(width=1280, height=720, fps=target_fps)
                     new_stream.start()
                     friendly_name += " [Giả lập Synthetic]"
 
@@ -432,6 +467,7 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
                 "video_path": req.video_path,
                 "name": friendly_name,
                 "is_fallback": "Synthetic" in friendly_name,
+                "fps": target_fps,
             })
 
             # Save as default if requested
@@ -524,6 +560,7 @@ def start_camera(req: CameraStartRequest) -> Dict[str, Any]:
         device_index=req.device_index,
         rtsp_url=req.rtsp_url,
         video_path=req.video_path,
+        fps=req.fps,
     )
     return switch_camera(switch_req)
 
@@ -990,17 +1027,26 @@ if frontend_dir.exists():
     @app.get("/")
     def serve_frontend_index():
         """Serve dashboard HTML homepage."""
-        return FileResponse(str(frontend_dir / "index.html"))
+        return FileResponse(
+            str(frontend_dir / "index.html"),
+            headers={"Cache-Control": "no-cache, must-revalidate"}
+        )
 
     @app.get("/styles.css")
     def serve_frontend_css():
         """Serve dashboard stylesheet."""
-        return FileResponse(str(frontend_dir / "styles.css"))
+        return FileResponse(
+            str(frontend_dir / "styles.css"),
+            headers={"Cache-Control": "no-cache, must-revalidate"}
+        )
 
     @app.get("/app.js")
     def serve_frontend_js():
         """Serve dashboard controller script."""
-        return FileResponse(str(frontend_dir / "app.js"))
+        return FileResponse(
+            str(frontend_dir / "app.js"),
+            headers={"Cache-Control": "no-cache, must-revalidate"}
+        )
 
     @app.get("/favicon.ico")
     def serve_frontend_favicon():

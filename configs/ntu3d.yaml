@@ -1,0 +1,23 @@
+sources:
+  ntu60:
+    url: https://download.openmmlab.com/mmaction/v1.0/skeleton/data/ntu60_3d.pkl
+    file: data/raw/ntu3d/ntu60_3d.pkl
+    num_classes: 60
+  ntu120:
+    url: https://download.openmmlab.com/mmaction/v1.0/skeleton/data/ntu120_3d.pkl
+    file: data/raw/ntu3d/ntu120_3d.pkl
+    num_classes: 120
+preparation:
+  frames: 30
+  seed: 42
+  validation_subject_fraction: 0.2
+  min_valid_frames: 5
+  min_torso_scale: 0.05
+training:
+  epochs: 10
+  batch_size: 128
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  seed: 42
+  cpu_threads: 4
+  checkpoint_dir: models/checkpoints/ntu3d

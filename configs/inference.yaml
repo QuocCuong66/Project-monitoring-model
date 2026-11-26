@@ -6,7 +6,7 @@ runtime:
   engine_type: "auto" # auto (TensorRT -> ONNX -> PyTorch), tensorrt, onnx, openvino, or pytorch
   batch_size: 1
   num_workers: 2
-  target_fps: 30
+  target_fps: 15
   sync_mode: false
   temporal_device: "cuda"  # ST-Transformer & Autoencoder device ("cuda" = DirectML GPU, or "cpu")
   dml_performance_preference: "high_performance" # DirectML GPU choice: high_performance (discrete GPU), minimum_power (integrated GPU), default (adapter 0)

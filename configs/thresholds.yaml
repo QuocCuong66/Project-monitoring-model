@@ -34,7 +34,7 @@ state_machine:
 monitoring_scope:
   safe_when_lying: true
   # Cách nằm xuống được tính là TÉ / ĐỔ GỤC (xem lying_onset_reason)
-  fall_onset_reasons: [fast_drop, upright_to_floor, unsteady_before, collapse_from_sitting, convulsion]
+  fall_onset_reasons: [fast_drop, upright_to_floor, unsteady_before, collapse_from_sitting, convulsion, roll_off_drop]
 
 # CO GIẬT: giật NHỊP NHÀNG (1.8 - 6 lần / giây) ở >= 3 phần cơ thể CÙNG NHỊP (có cả tay và chân), kéo dài.
 # Khác với: chủ động nằm / trở mình (1 lần cử động chậm rồi thôi), bấm điện thoại (chỉ 1 cổ tay),
@@ -77,6 +77,7 @@ lying_context:
   horizontal_aspect_ratio: 1.05     # khung người rộng/cao lớn hơn = đang nằm
   upright_torso_angle: 30.0         # độ: nhỏ hơn = đứng / ngồi thẳng...
   upright_aspect_ratio: 0.8         # ...và khung người còn hẹp (ngã nghiêng làm khung bè ra trước)
+  upright_reset_seconds: 0.8       # tư thế đứng/ngồi thẳng phải liên tục đủ lâu mới xoá ngữ cảnh đang nằm
   # Cách nằm xuống: người chủ động nằm thường NGỒI / QUỲ trước; ngã thì đi thẳng từ ĐỨNG xuống sàn
   standing_to_lying_seconds: 2.0    # từ thẳng người xuống nằm trong 2 giây mà KHÔNG thấy ngồi / quỳ trước = ĐỔ GỤC
   seated_min_seconds: 0.8           # ngồi / quỳ ít nhất 0.8 giây rồi mới nằm = chủ động nằm
@@ -102,6 +103,7 @@ lying_context:
   inherit_seconds: 30.0             # mất dấu rồi nhận lại người ở gần đó: giữ ngữ cảnh cũ
   inherit_distance: 0.25
   benign_action_cap: 0.30           # khi nằm bình thường: giới hạn điểm từ nhãn "lying/immobile"
+  confirmed_fall_immobility_min: 0.8 # đã ghi nhận ngã đột ngột rồi nằm im: không bỏ sót vì model chỉ thấy tư thế nằm
   warning_risk: 0.80                # dấu hiệu cảnh báo đơn lẻ: hiện BẤT THƯỜNG, chưa phát báo động (giữa 0.76 và 0.88)
   escalated_warning_risk: 0.92      # dấu hiệu + đổ gục / nằm trên sàn: có thể phát báo động (> 0.88)
   history_seconds: 60.0

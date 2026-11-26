@@ -21,13 +21,19 @@ class FramePacket:
 class CameraStream(ABC):
     """Abstract interface for all video and camera input streams."""
 
-    def __init__(self, max_queue_size: int = 2) -> None:
+    def __init__(self, max_queue_size: int = 2, target_fps: float = 15.0) -> None:
         self.max_queue_size = max_queue_size
         self._queue: queue.Queue[FramePacket] = queue.Queue(maxsize=max_queue_size)
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._frame_count = 0
         self._source_name = "unknown"
+        self.target_fps = float(target_fps) if target_fps else 15.0
+        self._last_packet_time = 0.0
+
+    def set_fps(self, fps: float) -> None:
+        """Update target acquisition/processing FPS dynamically (10, 15, or 30)."""
+        self.target_fps = max(1.0, float(fps))
 
     @abstractmethod
     def _open_capture(self) -> bool:
@@ -44,10 +50,9 @@ class CameraStream(ABC):
         """Release capture device resources."""
         pass
 
-    @abstractmethod
     def get_fps(self) -> float:
-        """Get native frame rate of stream."""
-        pass
+        """Get native or target frame rate of stream."""
+        return float(self.target_fps)
 
     @abstractmethod
     def get_resolution(self) -> Tuple[int, int]:
@@ -76,11 +81,19 @@ class CameraStream(ABC):
                 time.sleep(0.01)
                 continue
 
+            now = time.time()
+            if self.target_fps > 0 and self._last_packet_time > 0:
+                min_interval = 1.0 / self.target_fps
+                if (now - self._last_packet_time) < (min_interval - 0.002):
+                    time.sleep(0.001)
+                    continue
+
+            self._last_packet_time = now
             self._frame_count += 1
             packet = FramePacket(
                 frame=frame,
                 frame_idx=self._frame_count,
-                timestamp=time.time(),
+                timestamp=now,
                 source_name=self._source_name,
             )
 

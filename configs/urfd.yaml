@@ -1,0 +1,32 @@
+dataset:
+  page_url: https://fenix.ur.edu.pl/~mkepski/ds/uf.html
+  raw_dir: data/raw/urfd
+  pose_dir: data/poses/urfd
+  workers: 8
+  timeout_seconds: 90
+  retries: 4
+  download_rgb: true
+  download_depth: true
+
+preparation:
+  pose_config: configs/model.yaml
+  pose_device: cuda
+  sample_stride: 2
+  window_size: 30
+  window_stride: 5
+  min_valid_fraction: 0.7
+  keypoint_confidence: 0.3
+  min_visible_joints: 6
+  seed: 42
+  train_fraction: 0.6
+  val_fraction: 0.2
+
+training:
+  epochs: 20
+  batch_size: 64
+  learning_rate: 0.00005
+  replay_per_class: 300
+  baseline_weights: models/checkpoints/best_st_transformer.pt
+  replay_data: data/processed/ntu_hard_negatives.npz
+  output: models/checkpoints/urfd_candidate.pt
+  threshold_grid: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]

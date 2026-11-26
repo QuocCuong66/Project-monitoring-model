@@ -1,12 +1,13 @@
 # Camera & Input Stream Configuration
 
 source_type: "webcam" # "webcam", "rtsp", "video"
+fps: 15               # Default FPS (options: 10, 15, 30)
 
 webcam:
   device_index: 0
   width: 1280
   height: 720
-  fps: 30
+  fps: 15
   api_preference: "dshow" # "dshow" on windows, "v4l2" on linux, or "default"
   warmup_seconds: 2.0              # chỉ nhận webcam khi đọc được hình trong 2 giây (mở được mà không có hình = đang bị chiếm)
   reopen_after_seconds: 2.0        # không có hình mới sau 2 giây (Zalo / Teams / Camera / Phone Link giành webcam): đóng và mở lại

@@ -36,7 +36,8 @@ NTU_DISTRESS = {43, 44, 47}  # A44 headache, A45 chest pain, A48 nausea / vomiti
 NTU_STAND_UP = 8         # A09 stand up (from sitting)
 NTU_BEND = {5, 15, 16}   # A06 pick up, A16 wear shoe, A17 take off shoe
 NTU_WALK = {58, 59}      # A59 walking towards, A60 walking apart (two people)
-NTU_SKIP = {7, 45, 46}   # A08 sit down (ambiguous transition), A46 back pain, A47 neck pain
+NTU_SIT_DOWN = 7         # A08: essential hard negative, not a fall
+NTU_SKIP = {45, 46}      # A46 back pain, A47 neck pain
 NTU_MUTUAL_FIRST = 49    # A50+ are two-person interactions (only walking is used)
 
 SRC_FPS = 30
@@ -147,6 +148,8 @@ def main() -> None:
             add(windows(tr, t, 1, rng), CLS["abnormal_movement"], is_val, lab)
         elif lab == NTU_STAND_UP:
             add(windows(tr, t, 2, rng), CLS["getting_up"], is_val, lab)
+        elif lab == NTU_SIT_DOWN:
+            add(windows(tr, t, 3, rng), CLS["sitting"], is_val, lab)
         elif lab in NTU_BEND:
             add(windows(tr, t, 1, rng), CLS["bending"], is_val, lab)
         else:

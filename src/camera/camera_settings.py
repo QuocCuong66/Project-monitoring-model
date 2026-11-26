@@ -37,12 +37,15 @@ def load_user_camera_settings(path: Optional[Path] = None) -> dict[str, Any]:
 
 
 def save_user_camera_settings(selection: dict[str, Any], path: Optional[Path] = None) -> Path:
-    """Persist the camera chosen in the UI (source_type, device_index, rtsp_url, video_path)."""
+    """Persist the camera chosen in the UI (source_type, device_index, rtsp_url, video_path, fps)."""
     path = path or get_camera_settings_path()
     data = load_user_camera_settings(path)
     data["source_type"] = selection.get("source_type", data.get("source_type", "webcam"))
     if selection.get("device_index") is not None:
         data.setdefault("webcam", {})["device_index"] = int(selection["device_index"])
+    if selection.get("fps") is not None:
+        data["fps"] = int(selection["fps"])
+        data.setdefault("webcam", {})["fps"] = int(selection["fps"])
     if selection.get("rtsp_url"):
         data.setdefault("rtsp", {})["url"] = str(selection["rtsp_url"]).strip()
     if selection.get("video_path"):
@@ -65,7 +68,10 @@ def merge_camera_config(base: dict[str, Any], user: dict[str, Any]) -> dict[str,
 
 
 def load_camera_config() -> dict[str, Any]:
-    return merge_camera_config(load_config("camera.yaml") or {}, load_user_camera_settings())
+    cfg = merge_camera_config(load_config("camera.yaml") or {}, load_user_camera_settings())
+    if "fps" not in cfg:
+        cfg["fps"] = int(cfg.get("webcam", {}).get("fps", 15))
+    return cfg
 
 
 def load_extra_cameras(path: Optional[Path] = None) -> list[dict[str, Any]]:

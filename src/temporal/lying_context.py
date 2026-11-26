@@ -55,6 +55,7 @@ class LyingContextConfig:
     horizontal_aspect_ratio: float = 1.05     # bbox width / height: wider = lying
     upright_torso_angle: float = 30.0         # deg: below = standing / sitting upright...
     upright_aspect_ratio: float = 0.8         # ...with a narrow bbox (a sideways fall widens it first)
+    upright_reset_seconds: float = 0.8       # brief pose flicker while rolling must not erase a lying episode
     standing_to_lying_seconds: float = 2.0    # standing (legs straight) -> lying this fast, no sitting = sudden
     seated_min_seconds: float = 0.8           # sat / knelt at least this long before lying = deliberate
     standing_thigh_length: float = 0.6        # knee below hip by >= this (torso lengths) = legs straight
@@ -79,6 +80,7 @@ class LyingContextConfig:
     inherit_seconds: float = 30.0             # re-identified track inherits a nearby recent episode
     inherit_distance: float = 0.25            # ... within this share of the frame
     benign_action_cap: float = 0.30           # max action evidence while lying normally
+    confirmed_fall_immobility_min: float = 0.8  # confirmed descent + sustained stillness overrides a benign model label
     warning_risk: float = 0.80                # warning sign alone: shown as ABNORMAL, no alarm
     escalated_warning_risk: float = 0.92      # warning sign + sudden onset / floor: can alarm
     history_seconds: float = 60.0
@@ -151,6 +153,7 @@ class _Episode:
     voluntary_since: Optional[float] = None # start of the current run of phone use / turning over
     reason: str = ""
     convulsed: bool = False
+    roll_off_detected: bool = False
 
 
 @dataclass
@@ -158,6 +161,7 @@ class _TrackState:
     samples: deque = field(default_factory=deque)
     episode: Optional[_Episode] = None
     last_upright: Optional[float] = None
+    upright_since: Optional[float] = None
     peak_vy_since_upright: float = 0.0
     last_standing: Optional[float] = None
     seated_start: Optional[float] = None
@@ -339,7 +343,10 @@ class LyingContextAnalyzer:
         cfg = self.cfg
         if self.convulsion_cfg.enabled and st.convulsion.jerked_recently(now, self.convulsion_cfg):
             return "sudden", "convulsion"                  # jerking rhythmically, then went down
-        fast_drop = st.peak_vy_since_upright >= cfg.sudden_onset_velocity
+        # An initial noisy hip estimate on an already-lying person is not an
+        # observed descent. Require an upright history before declaring a drop.
+        fast_drop = (st.last_upright is not None
+                     and st.peak_vy_since_upright >= cfg.sudden_onset_velocity)
         if st.seated_since_standing and fast_drop:
             return "sudden", "collapse_from_sitting"
         if unsteady_recently and st.seated_seconds < cfg.rest_seated_seconds:
@@ -450,6 +457,13 @@ class LyingContextAnalyzer:
         else:
             st.seated_start = None
         if upright:
+            if st.upright_since is None:
+                st.upright_since = timestamp
+        else:
+            st.upright_since = None
+        confirmed_upright = (upright and st.upright_since is not None
+                             and timestamp - st.upright_since >= cfg.upright_reset_seconds)
+        if confirmed_upright:
             if st.episode is not None:
                 self._remember(st, timestamp)
             st.episode = None
@@ -489,6 +503,16 @@ class LyingContextAnalyzer:
             ep.hip_baseline is not None and ep.torso_px and sample.hip_y is not None
             and (sample.hip_y - ep.hip_baseline) / ep.torso_px >= cfg.roll_off_drop
         )
+        # Keep the first clear drop below the original resting level. The denominator and pose
+        # estimate can change in later frames, so recomputing this from only the current frame can
+        # erase a real bed/sofa roll-off and leave the episode incorrectly marked benign.
+        if level_drop and not in_zone:
+            ep.roll_off_detected = True
+            if ep.onset == "unknown":
+                ep.onset = "sudden"
+                ep.reason = "roll_off_drop"
+                ep.benign = False
+        level_drop = level_drop or ep.roll_off_detected
 
         # ---- activity over the recent window
         win = self._window(st, timestamp, cfg.activity_window_seconds)

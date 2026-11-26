@@ -232,6 +232,7 @@ class DecoupledPipeline:
             weights_path=temp_cfg.get("weights_path", None),
             device=temporal_device,
             architecture=temp_cfg.get("architecture", "tcn"),
+            normal_activity_policy=temp_cfg.get("normal_activity_policy"),
         )
         anom_cfg = model_cfg.get("anomaly", {})
         self.anomaly_detector = anomaly_detector or ReconstructionAnomalyScorer(

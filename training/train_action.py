@@ -97,6 +97,7 @@ def evaluate(model: nn.Module, loader: DataLoader, dev: torch.device) -> dict:
     present = cm.sum(1) > 0
     em = np.isin(np.arange(n), EMERGENCY)
     em_tp = cm[np.ix_(em, em)].sum()
+    normal = ~em
     return {
         "acc": float(tp.sum() / max(1, cm.sum())),
         "macro_f1": float(f1[present].mean()),
@@ -105,6 +106,7 @@ def evaluate(model: nn.Module, loader: DataLoader, dev: torch.device) -> dict:
                       for i in range(n) if present[i]},
         "emergency_recall": float(em_tp / max(1, cm[em].sum())),
         "emergency_precision": float(em_tp / max(1, cm[:, em].sum())),
+        "normal_emergency_fpr": float(cm[np.ix_(normal, em)].sum() / max(1, cm[normal].sum())),
         "confusion": cm.tolist(),
     }
 
@@ -117,7 +119,12 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=5e-4)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--out", default=str(ROOT / "models/checkpoints/best_st_transformer.pt"))
+    ap.add_argument("--resume", help="Initialize from a trained checkpoint (fine-tuning)")
+    ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    torch.set_num_threads(4)
 
     d = np.load(args.data)
     x, y, split = d["x"], d["y"], d["split"]
@@ -135,6 +142,11 @@ def main() -> None:
                             persistent_workers=args.workers > 0)
 
     model = SpatialTemporalTransformer(input_dim=51, num_classes=len(ACTION_CLASSES)).to(dev)
+    if args.resume:
+        checkpoint = torch.load(args.resume, map_location=dev, weights_only=False)
+        if checkpoint.get("classes") != ACTION_CLASSES:
+            raise ValueError("Checkpoint class order does not match ACTION_CLASSES")
+        model.load_state_dict(checkpoint["model_state_dict"])
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.05)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.epochs * len(train_loader),
                                                 pct_start=0.1)
@@ -143,6 +155,11 @@ def main() -> None:
     best = -1.0
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    if args.resume:
+        baseline = evaluate(model, val_loader, dev)
+        best = baseline["macro_f1"]
+        torch.save({"model_state_dict": model.state_dict(), "metrics": baseline, "classes": ACTION_CLASSES}, out)
+        print(f"Baseline macroF1={best:.4f} normal_emergency_fpr={baseline['normal_emergency_fpr']:.4f}", flush=True)
     for epoch in range(1, args.epochs + 1):
         model.train()
         tot, n = 0.0, 0
@@ -172,7 +189,7 @@ def main() -> None:
     torch.onnx.export(model, torch.zeros(1, x.shape[1], 17, 3), str(onnx_path), opset_version=17,
                       input_names=["skeletal_sequence"], output_names=["action_logits"],
                       dynamic_axes={"skeletal_sequence": {0: "batch"}, "action_logits": {0: "batch"}}, dynamo=False)
-    report = out.with_name("st_transformer_metrics.json")
+    report = out.with_suffix(".metrics.json")
     report.write_text(json.dumps(ckpt["metrics"], indent=2))
     print(f"[Done] best macro-F1={best:.3f} -> {out}, {onnx_path}, {report}")
 

@@ -7,11 +7,13 @@
 #define MyAppName "Fall and Stroke Warning System"
 #define MyAppShortName "Fall_and_Stroke_Warning_System"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.3.5"
+  #define MyAppVersion "0.3.8"
 #endif
 #define MyAppPublisher "Quốc Cường"
 #define MyAppExeName "Fall_and_Stroke_Warning_System.exe"
-#define SourceDir "..\dist\Fall_and_Stroke_Warning_System"
+#ifndef SourceDir
+  #define SourceDir "..\dist\Fall_and_Stroke_Warning_System"
+#endif
 
 [Setup]
 AppId={{6E2B8F3A-4C1D-4F7B-9A52-3D8E1F0C7B44}

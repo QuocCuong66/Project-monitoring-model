@@ -63,7 +63,8 @@ class ThresholdManager:
         self.safe_when_lying = bool(scope.get("safe_when_lying", False))
         self.fall_onset_reasons: tuple[str, ...] = tuple(
             str(r) for r in scope.get("fall_onset_reasons", (
-                "fast_drop", "upright_to_floor", "unsteady_before", "collapse_from_sitting", "convulsion"))
+                "fast_drop", "upright_to_floor", "unsteady_before", "collapse_from_sitting", "convulsion",
+                "roll_off_drop"))
         )
 
         # Lying context (sleep / phone / turning over vs warning signs); parsed by LyingContextConfig

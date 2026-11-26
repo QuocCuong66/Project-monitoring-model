@@ -19,7 +19,7 @@ from src.anomaly.anomaly_detector import AnomalyResult
 from src.temporal.temporal_features import KinematicFeatures
 from src.temporal.sequence_buffer import TrackSnapshot
 from src.temporal.convulsion import ConvulsionConfig
-from src.temporal.lying_context import NOT_LYING, LyingContext, LyingContextAnalyzer, LyingContextConfig
+from src.temporal.lying_context import COLLAPSED, NOT_LYING, LyingContext, LyingContextAnalyzer, LyingContextConfig
 from src.temporal.stroke_signs import StrokeSignAnalyzer, StrokeSignConfig, StrokeSigns
 from src.risk.threshold_manager import ThresholdManager
 from src.risk.state_machine import MonitorState, EventStateMachine
@@ -144,6 +144,16 @@ class RiskEngine:
                 fused_score = w_act * min(s_action, cap) + w_anom * s_anomaly + w_kin * s_kin
             if context.concern > 0.0:
                 fused_score = max(fused_score, context.concern)
+            # A learned resting-pose label cannot erase an observed fall history.
+            # This still goes through the same debounced event state machine.
+            confirmed_descent = context.onset == "sudden" and (
+                context.onset_reason in self.thresholds.fall_onset_reasons
+                or context.onset_reason == "inherited"
+            )
+            if (confirmed_descent and context.label == COLLAPSED and is_down
+                    and not context.benign and not context.in_rest_zone
+                    and s_immob >= self.lying_analyzer.cfg.confirmed_fall_immobility_min):
+                fused_score = max(fused_score, self.lying_analyzer.cfg.escalated_warning_risk)
 
         return float(np.clip(fused_score, 0.0, 1.0))
 

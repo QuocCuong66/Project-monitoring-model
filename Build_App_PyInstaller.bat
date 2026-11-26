@@ -49,7 +49,8 @@ if %errorlevel% neq 0 goto :fail
 
 :: Cấu hình + giao diện đặt cạnh file .exe để người dùng chỉnh sửa được
 :: (mô hình AI nằm trong _internal\models, không sao chép trùng lặp)
-xcopy /E /I /Y /Q "configs" "%APPDIR%\configs" >nul
+if not exist "%APPDIR%\configs" mkdir "%APPDIR%\configs"
+copy /Y "configs\*.yaml" "%APPDIR%\configs\" >nul
 xcopy /E /I /Y /Q "frontend" "%APPDIR%\frontend" >nul
 if not exist "%APPDIR%\scripts" mkdir "%APPDIR%\scripts"
 copy /Y "scripts\cai_dat_startup.vbs" "%APPDIR%\scripts\" >nul

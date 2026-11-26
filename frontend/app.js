@@ -117,14 +117,12 @@
   let soundEnabled = true;
   let isCameraRunning = false;
   let alertCount = 0;
+  const historyEvents = new Map();
+  let historyExpanded = false;
   let wsConnection = null;
   let wsReconnectTimer = null;
 
   // DOM Elements
-  const elBackendDot = document.getElementById("backend-status-dot");
-  const elBackendText = document.getElementById("backend-status-text");
-  const elWsDot = document.getElementById("ws-status-dot");
-  const elWsText = document.getElementById("ws-status-text");
   const elClock = document.getElementById("digital-clock");
 
   const elKpiFps = document.getElementById("kpi-fps");
@@ -139,6 +137,86 @@
 
   const elVideoStream = document.getElementById("live-video-stream");
   const elOfflineOverlay = document.getElementById("stream-offline-overlay");
+
+  const elHeaderFpsSelect = document.getElementById("header-fps-select");
+  const elCameraFpsSelect = document.getElementById("camera-fps-select");
+  const elModalFpsSelect = document.getElementById("modal-fps-select");
+  const elModalFpsPill = document.getElementById("modal-fps-pill");
+  let currentSelectedFps = 15;
+  let fpsChangePending = false;
+  let fpsRevision = 0;
+
+  function getSelectedFps() {
+    const el = elHeaderFpsSelect || elCameraFpsSelect || elModalFpsSelect;
+    if (el && [10, 15, 30].includes(Number(el.value))) {
+      return Number(el.value);
+    }
+    return currentSelectedFps || 15;
+  }
+
+  function syncFps(fps) {
+    const val = [10, 15, 30].includes(Number(fps)) ? Number(fps) : 15;
+    currentSelectedFps = val;
+    if (elHeaderFpsSelect && elHeaderFpsSelect.value !== String(val)) {
+      elHeaderFpsSelect.value = String(val);
+    }
+    if (elCameraFpsSelect && elCameraFpsSelect.value !== String(val)) {
+      elCameraFpsSelect.value = String(val);
+    }
+    if (elModalFpsSelect && elModalFpsSelect.value !== String(val)) {
+      elModalFpsSelect.value = String(val);
+    }
+    if (elModalFpsPill) {
+      elModalFpsPill.textContent = `${val} FPS`;
+    }
+  }
+
+  async function applyFps(fps) {
+    if (fpsChangePending) return;
+    const previous = currentSelectedFps;
+    const controls = [elHeaderFpsSelect, elCameraFpsSelect, elModalFpsSelect].filter(Boolean);
+    const feedback = document.getElementById("fps-feedback");
+    fpsChangePending = true;
+    fpsRevision++;
+    controls.forEach(control => { control.disabled = true; });
+    syncFps(fps, false);
+    if (feedback) feedback.textContent = "Đang lưu FPS…";
+    try {
+      const response = await apiFetch(`${API_BASE}/camera/fps`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fps: currentSelectedFps }),
+      });
+      if (!response.ok) throw new Error("Không lưu được FPS");
+      const result = await response.json();
+      syncFps(result.fps, false);
+      if (feedback) feedback.textContent = `Đã áp dụng ${currentSelectedFps} FPS.`;
+    } catch (_) {
+      syncFps(previous, false);
+      if (feedback) feedback.textContent = "Chưa lưu được FPS. Vui lòng thử lại.";
+    } finally {
+      fpsChangePending = false;
+      controls.forEach(control => { control.disabled = false; });
+    }
+  }
+
+  [elHeaderFpsSelect, elCameraFpsSelect, elModalFpsSelect].forEach((sel) => {
+    if (sel) {
+      sel.addEventListener("change", (e) => {
+        applyFps(e.target.value);
+      });
+    }
+  });
+
+  async function fetchFpsSetting() {
+    const fpsVersion = fpsRevision;
+    try {
+      const res = await apiFetch(`${API_BASE}/camera/fps`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.fps && !fpsChangePending && fpsVersion === fpsRevision) syncFps(data.fps, false);
+      }
+    } catch (_) {}
+  }
 
   // Camera Management DOM Elements
   const elCameraTypeSelect = document.getElementById("camera-type-select");
@@ -432,15 +510,11 @@
       try { wsConnection.close(); } catch (_) {}
     }
 
-    elWsDot.className = "badge-dot dot-warning";
-    elWsText.textContent = "WebSocket: Đang nối...";
 
     try {
       wsConnection = new WebSocket(getWsUrl());
 
       wsConnection.onopen = () => {
-        elWsDot.className = "badge-dot dot-online";
-        elWsText.textContent = "WebSocket: Real-time";
         if (wsReconnectTimer) {
           clearTimeout(wsReconnectTimer);
           wsReconnectTimer = null;
@@ -457,8 +531,6 @@
       };
 
       wsConnection.onclose = (evt) => {
-        elWsDot.className = "badge-dot dot-offline";
-        elWsText.textContent = "WebSocket: Mất kết nối";
         if (evt && evt.code === 4001) {
           handleAuthRequired();
         } else {
@@ -467,8 +539,6 @@
       };
 
       wsConnection.onerror = () => {
-        elWsDot.className = "badge-dot dot-offline";
-        elWsText.textContent = "WebSocket: Lỗi";
       };
     } catch (e) {
       console.warn("[Dashboard] WebSocket init failed, will retry:", e);
@@ -487,6 +557,7 @@
 
   // 4. Handle Incoming Alert
   function handleIncomingAlert(alert) {
+    if (alert.event_id && historyEvents.has(alert.event_id)) return;
     const personId = alert.person_id ?? "N/A";
     const primaryAction = (alert.evidence?.primary_action ?? alert.action ?? "").toLowerCase();
     const riskScore = typeof alert.risk_score === "number" ? alert.risk_score : 0.95;
@@ -523,10 +594,10 @@
       elVideoFallBadge.style.display = "flex";
       if (elVideoFallText) {
         elVideoFallText.textContent = isStrokeSigns
-          ? `⚠️ DẤU HIỆU CẢNH BÁO ĐỘT QUỴ / BỆNH CẤP — HÃY KIỂM TRA NGƯỜI NÀY! (ID #${personId})`
+          ? ` DẤU HIỆU CẢNH BÁO ĐỘT QUỴ / BỆNH CẤP — HÃY KIỂM TRA NGƯỜI NÀY! (ID #${personId})`
           : isFallRisk
-            ? `🚨 CẢNH BÁO: PHÁT HIỆN NGUY CƠ TÉ NGÃ! (ID #${personId})`
-            : `⚠️ CẢNH BÁO: PHÁT HIỆN HÀNH VI BẤT THƯỜNG! (ID #${personId})`;
+            ? ` CẢNH BÁO: PHÁT HIỆN NGUY CƠ TÉ NGÃ! (ID #${personId})`
+            : ` CẢNH BÁO: PHÁT HIỆN HÀNH VI BẤT THƯỜNG! (ID #${personId})`;
       }
     }
 
@@ -553,21 +624,6 @@
       elIncStatus.style.color = "#dc2626";
     }
 
-    // 5. Thêm dòng vào Bảng Lịch Sử Cảnh Báo
-    const elAlertsTbody = document.getElementById("alerts-table-body");
-    if (elAlertsTbody) {
-      const tr = document.createElement("tr");
-      tr.className = "alert-row-highlight";
-      tr.innerHTML = `
-        <td><span class="id-tag">#${String(alertCount + 1).padStart(3, '0')}</span></td>
-        <td>${new Date().toLocaleTimeString()}</td>
-        <td><span class="badge-type-danger">${isStrokeSigns ? "Dấu hiệu đột quỵ" : (isFallRisk ? "Té ngã" : "Bất thường")}</span></td>
-        <td>${escapeHtml(cameraLabel)}</td>
-        <td><span class="badge-state-pending">Đang xử lý</span></td>
-      `;
-      elAlertsTbody.prepend(tr);
-    }
-
     // 6. Prepend to feed
     renderAlertCard(alert, true);
 
@@ -583,7 +639,7 @@
     const existing = row.querySelector(".alert-item-clip, .alert-item-clip-note");
     if (existing) {
       row.querySelectorAll(".alert-item-clip, .alert-item-clip-note").forEach((el) => el.remove());
-      btn.textContent = "▶ Xem đoạn video té ngã";
+      btn.textContent = " Xem đoạn video té ngã";
       return;
     }
     const token = getSavedToken();
@@ -614,7 +670,7 @@
       note.className = "alert-item-clip-note";
       note.textContent = "Khuôn mặt đã được làm mờ. Video tự động xóa sau 7 ngày.";
       row.appendChild(note);
-      btn.textContent = "✕ Đóng video";
+      btn.textContent = " Đóng video";
     } catch (e) {
       console.warn("[Dashboard] Không tải được đoạn video:", e);
     } finally {
@@ -622,18 +678,95 @@
     }
   }
 
+  function eventTime(alert) {
+    const value = alert.timestamp;
+    const date = new Date(typeof value === "number" && value < 1e12 ? value * 1000 : value || Date.now());
+    return Number.isNaN(date.getTime()) ? new Date(0) : date;
+  }
+
+  function showAlertDetails(eventId) {
+    const dialog = document.getElementById("alert-details-dialog");
+    if (!dialog || !historyEvents.has(eventId)) return;
+    elAlertsFeed.querySelectorAll(".alert-item").forEach(card => { card.hidden = card.dataset.eventId !== eventId; });
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function refreshAlertHistory() {
+    const tbody = document.getElementById("alerts-table-body");
+    if (!tbody) return;
+    const events = [...historyEvents.entries()].sort((a, b) => eventTime(b[1]) - eventTime(a[1]));
+    tbody.replaceChildren();
+    const visible = historyExpanded ? events : events.slice(0, 20);
+    if (!visible.length) {
+      const row = tbody.insertRow(); row.className = "history-empty-row";
+      const cell = row.insertCell(); cell.colSpan = 5; cell.textContent = "Chưa có cảnh báo nào.";
+    }
+    visible.forEach(([id, alert]) => {
+      const row = tbody.insertRow();
+      const cell = row.insertCell();
+      const link = document.createElement("button");
+      link.type = "button"; link.className = "history-event-link";
+      link.textContent = id.length > 16 ? id.slice(0, 16) + "…" : id;
+      link.title = `Xem cảnh báo ${id}`;
+      link.addEventListener("click", () => showAlertDetails(id)); cell.appendChild(link);
+      row.insertCell().textContent = eventTime(alert).toLocaleString("vi-VN");
+      row.insertCell().textContent = {fall: "Nguy cơ té ngã", stroke_warning: "Dấu hiệu bất thường"}[alert.event_type] || "Hành vi bất thường";
+      row.insertCell().textContent = alert.camera_name || "Camera chính";
+      row.insertCell().textContent = "Đã ghi nhận";
+    });
+    alertCount = historyEvents.size;
+    if (elAlertsCountBadge) elAlertsCountBadge.textContent = `${alertCount} sự kiện`;
+    if (elEmptyPlaceholder) {
+      elEmptyPlaceholder.style.display = "block";
+      elEmptyPlaceholder.textContent = events.length ? `Hiển thị ${visible.length} / ${events.length} cảnh báo đã tải.` : "Lịch sử được lưu trên máy.";
+    }
+    const latest = events[0];
+    document.getElementById("incident-alert-card")?.classList.toggle("is-empty", !latest);
+    if (!latest) {
+      document.getElementById("incident-status-tag").textContent = "Chưa có cảnh báo";
+      document.getElementById("incident-cam-title").textContent = "Chưa có sự kiện";
+      document.getElementById("incident-timestamp-txt").textContent = "Chưa có thời gian ghi nhận";
+      document.getElementById("incident-confidence-txt").textContent = "Chưa có dữ liệu";
+    }
+    const view = document.getElementById("btn-view-incident-detail");
+    const process = document.getElementById("btn-process-incident");
+    if (view) { view.disabled = !latest; view.onclick = () => latest && showAlertDetails(latest[0]); }
+    if (process) { process.disabled = !latest; process.onclick = () => elBtnDismissAlert?.click(); }
+    if (latest) {
+      const alert = latest[1];
+      document.getElementById("incident-timestamp-txt").textContent = eventTime(alert).toLocaleString("vi-VN");
+      document.getElementById("incident-cam-title").textContent = alert.camera_name || "Camera chính";
+      document.getElementById("incident-confidence-txt").textContent = typeof alert.risk_score === "number" ? alert.risk_score.toFixed(2) : "Chưa có dữ liệu";
+      document.getElementById("incident-status-tag").textContent = "Đã ghi nhận";
+    }
+  }
+
+  const detailDialog = document.getElementById("alert-details-dialog");
+  document.getElementById("btn-close-alert-details")?.addEventListener("click", () => detailDialog.close());
+  detailDialog?.addEventListener("click", event => { if (event.target === detailDialog) detailDialog.close(); });
+  document.getElementById("btn-history-view-all")?.addEventListener("click", async event => {
+    historyExpanded = !historyExpanded;
+    event.currentTarget.textContent = historyExpanded ? "Thu gọn" : "Xem tất cả";
+    event.currentTarget.setAttribute("aria-expanded", String(historyExpanded));
+    if (historyExpanded) await fetchHistoricalEvents(1000);
+    refreshAlertHistory();
+  });
+
   function renderAlertCard(alert, isNew = false) {
+    const eventId = String(alert.event_id || `evt_${alert.timestamp || Date.now()}_trk${alert.person_id}`);
+    if (historyEvents.has(eventId)) return;
+    historyEvents.set(eventId, alert);
     if (elEmptyPlaceholder) {
       elEmptyPlaceholder.style.display = "none";
     }
 
     alertCount++;
-    elAlertsCountBadge.textContent = `${alertCount} sự kiện ›`;
+    elAlertsCountBadge.textContent = `${alertCount} sự kiện `;
 
     const card = document.createElement("div");
     card.className = "alert-item";
 
-    const eventId = alert.event_id || `evt_${Date.now()}_trk${alert.person_id}`;
+    card.hidden = true;
     card.dataset.eventId = eventId;
 
     const timestamp = alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
@@ -648,23 +781,22 @@
     card.innerHTML = `
       <div class="alert-item-header">
         <div class="alert-item-title">
-          <span>🚨</span>
-          <span>${streamTitle ? `[${streamTitle}] ` : ""}${alert.camera_name ? `${escapeHtml(alert.camera_name)} · ` : ""}Đối tượng #${alert.person_id} — ${escapeHtml(action.toUpperCase())}</span>
+                    <span>${streamTitle ? `[${streamTitle}] ` : ""}${alert.camera_name ? `${escapeHtml(alert.camera_name)} · ` : ""}Đối tượng #${alert.person_id} — ${escapeHtml(action.toUpperCase())}</span>
         </div>
         <div class="alert-item-header-actions">
           <span class="alert-item-time">${timestamp}</span>
           <div class="alert-menu-wrapper">
-            <button type="button" class="btn-alert-menu" title="Tùy chọn cảnh báo" aria-label="Tùy chọn cảnh báo">⋮</button>
+            <button type="button" class="btn-alert-menu" title="Tùy chọn cảnh báo" aria-label="Tùy chọn cảnh báo">Tùy chọn</button>
             <div class="alert-menu-dropdown">
               <button type="button" class="dropdown-item btn-delete-single-perm" title="Xóa vĩnh viễn cảnh báo này">
-                <span>🗑️</span> Xóa vĩnh viễn
+                Xóa vĩnh viễn
               </button>
             </div>
           </div>
         </div>
       </div>
       <div class="alert-item-msg">
-        ${alert.message || "Possible medical emergency / abnormal behavior detected. Please check the person."}
+        ${escapeHtml(alert.message || "Possible medical emergency / abnormal behavior detected. Please check the person.")}
       </div>
       <div class="alert-item-meta">
         <span class="meta-field">Rủi ro: <strong>${score}</strong></span>
@@ -677,7 +809,7 @@
       </div>
       ${alert.clip_path ? `
       <div class="alert-item-clip-row">
-        <button type="button" class="btn-alert-clip">▶ Xem đoạn video té ngã</button>
+        <button type="button" class="btn-alert-clip"> Xem đoạn video té ngã</button>
       </div>` : ""}
     `;
 
@@ -725,23 +857,26 @@
     } else {
       elAlertsFeed.appendChild(card);
     }
+    refreshAlertHistory();
   }
 
   // 5. Polling REST APIs for Telemetry & Health
   let lastConnState = null;
   async function pollStatus() {
+    const fpsVersion = fpsRevision;
     try {
       const res = await apiFetch(`${API_BASE}/status`);
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
 
-      elBackendDot.className = "badge-dot dot-online";
-      elBackendText.textContent = "API: Sẵn sàng";
+      if (data.target_fps && !fpsChangePending && fpsVersion === fpsRevision) {
+        syncFps(data.target_fps, false);
+      }
 
       // Camera State
       isCameraRunning = Boolean(data.camera_active);
-      elKpiFps.textContent = data.current_fps ? data.current_fps.toFixed(1) : "0.0";
-      elKpiTracks.textContent = data.tracked_persons_count ?? 0;
+      if (elKpiFps) elKpiFps.textContent = data.current_fps ? data.current_fps.toFixed(1) : "0.0";
+      if (elKpiTracks) elKpiTracks.textContent = data.tracked_persons_count ?? 0;
 
       // Network / remote camera health (auto-reconnect with backoff runs on the server)
       const conn = data.camera_connection;
@@ -757,21 +892,21 @@
       // Update button labels
       if (isCameraRunning) {
         if (elBtnCamToggleTxt) elBtnCamToggleTxt.textContent = "DỪNG STREAM";
-        if (elBtnCamToggleIcon) elBtnCamToggleIcon.textContent = "⏹️";
+        if (elBtnCamToggleIcon) elBtnCamToggleIcon.textContent = "";
         if (elBtnCameraToggle) {
           elBtnCameraToggle.style.background = "rgba(239, 68, 68, 0.2)";
           elBtnCameraToggle.style.borderColor = "rgba(239, 68, 68, 0.4)";
           elBtnCameraToggle.style.color = "#f87171";
         }
         if (elOfflineOverlay) elOfflineOverlay.style.display = "none";
-        
+
         // Camera connected: show its picture automatically
         if (!elVideoStream.getAttribute("src") || elVideoStream.src.indexOf("/stream/mjpeg") === -1) {
           elVideoStream.src = buildMjpegUrl();
         }
       } else {
         if (elBtnCamToggleTxt) elBtnCamToggleTxt.textContent = "BẬT STREAM";
-        if (elBtnCamToggleIcon) elBtnCamToggleIcon.textContent = "▶️";
+        if (elBtnCamToggleIcon) elBtnCamToggleIcon.textContent = "";
         if (elBtnCameraToggle) {
           elBtnCameraToggle.style.background = "";
           elBtnCameraToggle.style.borderColor = "";
@@ -783,8 +918,6 @@
       // Update simulated or active persons in table
       updatePersonTable(data.tracked_persons_count);
     } catch (_) {
-      elBackendDot.className = "badge-dot dot-offline";
-      elBackendText.textContent = "API: Mất kết nối";
       elOfflineOverlay.style.display = "flex";
     }
   }
@@ -805,21 +938,21 @@
 
   // 6. Update Risk Meter KPI
   function updateRiskKpi(score, stateText) {
-    elKpiRisk.textContent = score.toFixed(2);
-    elKpiRiskState.textContent = stateText || (score > 0.7 ? "NGUY CƠ CAO" : score > 0.4 ? "NGHI VẤN" : "BÌNH THƯỜNG");
+    if (elKpiRisk) elKpiRisk.textContent = score.toFixed(2);
+    if (elKpiRiskState) elKpiRiskState.textContent = stateText || (score > 0.7 ? "NGUY CƠ CAO" : score > 0.4 ? "NGHI VẤN" : "BÌNH THƯỜNG");
 
     const pct = Math.min(100, Math.max(5, score * 100));
-    elKpiRiskMeter.style.width = `${pct}%`;
+    if (elKpiRiskMeter) elKpiRiskMeter.style.width = `${pct}%`;
 
     if (score > 0.7) {
-      elKpiRisk.className = "kpi-value risk-red";
-      elKpiRiskMeter.className = "kpi-meter-fill meter-red";
+      if (elKpiRisk) elKpiRisk.className = "kpi-value risk-red";
+      if (elKpiRiskMeter) elKpiRiskMeter.className = "kpi-meter-fill meter-red";
     } else if (score > 0.4) {
-      elKpiRisk.className = "kpi-value risk-yellow";
-      elKpiRiskMeter.className = "kpi-meter-fill meter-yellow";
+      if (elKpiRisk) elKpiRisk.className = "kpi-value risk-yellow";
+      if (elKpiRiskMeter) elKpiRiskMeter.className = "kpi-meter-fill meter-yellow";
     } else {
-      elKpiRisk.className = "kpi-value risk-green";
-      elKpiRiskMeter.className = "kpi-meter-fill meter-green";
+      if (elKpiRisk) elKpiRisk.className = "kpi-value risk-green";
+      if (elKpiRiskMeter) elKpiRiskMeter.className = "kpi-meter-fill meter-green";
     }
   }
 
@@ -891,16 +1024,19 @@
   }
 
   // 8. Fetch Historical Events on Load
-  async function fetchHistoricalEvents() {
+  async function fetchHistoricalEvents(limit = 20) {
     try {
-      const res = await apiFetch(`${API_BASE}/events?limit=20`);
-      if (!res.ok) return;
+      const res = await apiFetch(`${API_BASE}/events?limit=${limit}`);
+      if (!res.ok) throw new Error("Không tải được lịch sử");
       const events = await res.json();
       if (Array.isArray(events) && events.length > 0) {
         if (elEmptyPlaceholder) elEmptyPlaceholder.style.display = "none";
         events.forEach(evt => renderAlertCard(evt, false));
       }
-    } catch (_) {}
+      refreshAlertHistory();
+    } catch (_) {
+      if (elEmptyPlaceholder) elEmptyPlaceholder.textContent = "Không tải được lịch sử. Bấm Xem tất cả để thử lại.";
+    }
   }
 
   // 9. Interactive UI Events
@@ -931,7 +1067,7 @@
     if (!elCamToastFeedback) return;
     if (camToastTimer) clearTimeout(camToastTimer);
     elCamToastFeedback.className = `cam-toast-feedback toast-${type}`;
-    elCamToastFeedback.innerHTML = `<span>${type === "success" ? "✅" : (type === "error" ? "❌" : "ℹ️")}</span> <span>${msg}</span>`;
+    elCamToastFeedback.textContent = msg;
     elCamToastFeedback.style.display = "flex";
     if (duration > 0) {
       camToastTimer = setTimeout(() => {
@@ -968,7 +1104,7 @@
         return;
       }
       elBtnTestRtsp.disabled = true;
-      elBtnTestRtsp.textContent = "⏳ Đang thử...";
+      elBtnTestRtsp.textContent = " Đang thử...";
       showCamFeedback("Đang thử kết nối tới camera (tối đa ~10 giây với camera ở xa)...", "info", 0);
       try {
         const res = await apiFetch(`${API_BASE}/camera/test`, {
@@ -982,7 +1118,7 @@
         } else {
           // The backend explains the failure (own IP, RTSP off, wrong verification code, wrong path...)
           const msg = escapeHtml(data.message || data.detail || "Không kết nối được camera.");
-          showCamFeedback(data.hint ? `${msg}<br>👉 ${escapeHtml(data.hint)}` : msg, "error", 15000);
+          showCamFeedback(data.hint ? `${msg}<br> ${escapeHtml(data.hint)}` : msg, "error", 15000);
         }
       } catch (e) {
         showCamFeedback("Lỗi kết nối tới Backend API: " + e.message, "error", 5000);
@@ -1018,7 +1154,7 @@
   async function discoverNetworkCameras() {
     if (!elBtnDiscoverCameras || !elCamDiscoverResults) return;
     elBtnDiscoverCameras.disabled = true;
-    elBtnDiscoverCameras.textContent = "⏳ Đang dò mạng (~5 giây)...";
+    elBtnDiscoverCameras.textContent = " Đang dò mạng (~5 giây)...";
     elCamDiscoverResults.style.display = "none";
     try {
       const res = await apiFetch(`${API_BASE}/camera/discover`);
@@ -1038,7 +1174,7 @@
         item.type = "button";
         item.className = "cam-discover-item" + (dev.rtsp_open ? "" : " rtsp-off");
         item.innerHTML = `<span class="cam-discover-head">${escapeHtml(dev.ip)} · ${escapeHtml(dev.brand)}</span>`
-          + `<span class="cam-discover-status">${dev.rtsp_open ? "✅" : "⚠️"} ${escapeHtml(dev.status)}</span>`;
+          + `<span class="cam-discover-status">${dev.rtsp_open ? "" : ""} ${escapeHtml(dev.status)}</span>`;
         item.addEventListener("click", () => applyDiscoveredCamera(dev));
         elCamDiscoverResults.appendChild(item);
       });
@@ -1050,7 +1186,7 @@
       showCamFeedback("Không dò được mạng: " + escapeHtml(String(e.message || e)), "error", 6000);
     } finally {
       elBtnDiscoverCameras.disabled = false;
-      elBtnDiscoverCameras.textContent = "📡 Dò camera trong mạng";
+      elBtnDiscoverCameras.textContent = " Dò camera trong mạng";
     }
   }
 
@@ -1071,7 +1207,7 @@
     try {
       if (elBtnScanWebcams) {
         elBtnScanWebcams.disabled = true;
-        elBtnScanWebcams.textContent = "⏳ Đang quét...";
+        elBtnScanWebcams.textContent = " Đang quét...";
       }
       const res = await apiFetch(`${API_BASE}/camera/devices`);
       if (!res.ok) return;
@@ -1109,7 +1245,7 @@
     } finally {
       if (elBtnScanWebcams) {
         elBtnScanWebcams.disabled = false;
-        elBtnScanWebcams.textContent = "🔍 Quét";
+        elBtnScanWebcams.textContent = " Quét";
       }
     }
   }
@@ -1227,6 +1363,7 @@
           rtsp_url: rtspUrl || undefined,
           ...(srcType === "rtsp" ? readRtspCredentials() : {}),
           video_path: videoPath || undefined,
+          fps: getSelectedFps(),
           save_as_default: saveDefault,
         }),
       });
@@ -1263,7 +1400,7 @@
     } finally {
       if (elBtnApplyCamera) elBtnApplyCamera.disabled = false;
       if (elCamSpinner) elCamSpinner.style.display = "none";
-      if (elBtnApplyTxt) elBtnApplyTxt.textContent = "🔄 ÁP DỤNG & CHUYỂN CAMERA";
+      if (elBtnApplyTxt) elBtnApplyTxt.textContent = " ÁP DỤNG & CHUYỂN CAMERA";
     }
   }
 
@@ -1323,6 +1460,8 @@
       }
     }
 
+    historyEvents.delete(eventId);
+    refreshAlertHistory();
     if (cardElement) {
       cardElement.style.transition = "all 0.25s ease-out";
       cardElement.style.opacity = "0";
@@ -1334,8 +1473,8 @@
       }, 250);
     }
 
-    alertCount = Math.max(0, alertCount - 1);
-    elAlertsCountBadge.textContent = alertCount > 0 ? `${alertCount} sự kiện ›` : "0 sự kiện ›";
+    alertCount = historyEvents.size;
+    elAlertsCountBadge.textContent = alertCount > 0 ? `${alertCount} sự kiện ` : "0 sự kiện ";
 
     if (alertCount === 0) {
       if (elEmptyPlaceholder) {
@@ -1351,10 +1490,11 @@
   // Chức năng 1: Xóa tạm thời (Ẩn khỏi màn hình hiện tại & tắt chuông, không xóa dữ liệu máy chủ)
   function clearTempAlerts() {
     elAlertsFeed.innerHTML = "";
-    elAlertsFeed.appendChild(elEmptyPlaceholder);
+    historyEvents.clear();
+    refreshAlertHistory();
     elEmptyPlaceholder.style.display = "flex";
     alertCount = 0;
-    elAlertsCountBadge.textContent = "0 sự kiện ›";
+    elAlertsCountBadge.textContent = "0 sự kiện ";
 
     stopContinuousAlarm();
     clearEmergencyVisuals();
@@ -1372,10 +1512,11 @@
     if (!confirmClear) return;
 
     elAlertsFeed.innerHTML = "";
-    elAlertsFeed.appendChild(elEmptyPlaceholder);
+    historyEvents.clear();
+    refreshAlertHistory();
     elEmptyPlaceholder.style.display = "flex";
     alertCount = 0;
-    elAlertsCountBadge.textContent = "0 sự kiện ›";
+    elAlertsCountBadge.textContent = "0 sự kiện ";
 
     stopContinuousAlarm();
     clearEmergencyVisuals();
@@ -1464,7 +1605,7 @@
         link.download = `camera_snapshot_${timestamp}.png`;
         link.href = canvas.toDataURL("image/png");
         link.click();
-        showCamFeedback("📸 Đã chụp và tải ảnh snapshot về máy!", "success", 2500);
+        showCamFeedback(" Đã chụp và tải ảnh snapshot về máy!", "success", 2500);
       } catch (err) {
         console.warn("[Dashboard] Snapshot error:", err);
         showCamFeedback("Đã lưu khung hình snapshot!", "info", 2500);
@@ -1487,7 +1628,7 @@
 
   function updateSoundUi() {
     if (elSoundIconIndicator) {
-      elSoundIconIndicator.textContent = soundEnabled ? "🔊" : "🔇";
+      elSoundIconIndicator.textContent = soundEnabled ? "" : "";
     }
     if (elSoundBadgeStatus) {
       elSoundBadgeStatus.textContent = soundEnabled ? "BẬT" : "TẮT";
@@ -1617,20 +1758,20 @@
     }
 
     if (st.state === "error" && st.error) {
-      showUpdateFeedback(`⚠ ${st.error}`, "error");
+      showUpdateFeedback(` ${st.error}`, "error");
     } else if (downloading) {
       const total = st.total_bytes ? ` / ${formatMb(st.total_bytes)}` : "";
       showUpdateFeedback(`Đang tải bộ cài: ${formatMb(st.downloaded_bytes)}${total}...`, "success");
     } else if (ready) {
       showUpdateFeedback(st.can_install
-        ? "✓ Đã tải xong và kiểm tra bộ cài. Bấm \"Cài đặt & khởi động lại\" khi sẵn sàng."
-        : "✓ Đã tải xong. Đang chạy từ mã nguồn nên không tự cài được: hãy cập nhật bằng git pull, hoặc cài bằng bộ cài trên GitHub.", "success");
+        ? "Đã tải xong và kiểm tra bộ cài. Bấm \"Cài đặt & khởi động lại\" khi sẵn sàng."
+        : "Đã tải xong. Đang chạy từ mã nguồn nên không tự cài được: hãy cập nhật bằng git pull, hoặc cài bằng bộ cài trên GitHub.", "success");
     } else if (st.state === "installing") {
       showUpdateFeedback("Đang cài bản mới... Hệ thống sẽ tự mở lại sau khoảng 1 phút, sau đó tải lại trang này.", "success");
     } else if (st.check_error) {
-      showUpdateFeedback(`⚠ ${st.check_error}`, "error");
+      showUpdateFeedback(` ${st.check_error}`, "error");
     } else if (st.checked_at && !st.update_available) {
-      showUpdateFeedback(`✓ Bạn đang dùng phiên bản mới nhất (v${st.current_version}).`, "success");
+      showUpdateFeedback(`Bạn đang dùng phiên bản mới nhất (v${st.current_version}).`, "success");
     } else {
       showUpdateFeedback("", "success");
     }
@@ -1655,14 +1796,14 @@
     try {
       const res = await apiFetch(`${API_BASE}/api/update/${action}`, { method: "POST" });
       if (!res.ok) {
-        showUpdateFeedback(`⚠ ${await readApiError(res)}`, "error");
+        showUpdateFeedback(` ${await readApiError(res)}`, "error");
         return null;
       }
       const st = await res.json();
       renderUpdateStatus(st);
       return st;
     } catch (e) {
-      showUpdateFeedback(`⚠ Không kết nối được máy chủ: ${e.message}`, "error");
+      showUpdateFeedback(` Không kết nối được máy chủ: ${e.message}`, "error");
       return null;
     }
   }
@@ -1747,7 +1888,7 @@
   if (elBtnCheckCamera) {
     elBtnCheckCamera.addEventListener("click", async () => {
       elBtnCheckCamera.disabled = true;
-      elBtnCheckCamera.innerHTML = "<span>⏳</span> Đang kiểm tra...";
+      elBtnCheckCamera.innerHTML = "Đang kiểm tra...";
       try {
         const res = await apiFetch(`${API_BASE}/api/settings/check-camera`, { method: "POST" });
         const data = await res.json();
@@ -1755,10 +1896,10 @@
           elCameraCheckFeedback.style.display = "block";
           if (data.status) {
             elCameraCheckFeedback.className = "settings-feedback feedback-success";
-            elCameraCheckFeedback.textContent = `✓ ${data.message} (Cổng tìm thấy: ${data.working_devices?.join(", ") || "0"})`;
+            elCameraCheckFeedback.textContent = `${data.message} (Cổng tìm thấy: ${data.working_devices?.join(", ") || "0"})`;
           } else {
             elCameraCheckFeedback.className = "settings-feedback feedback-error";
-            elCameraCheckFeedback.textContent = `⚠ ${data.message}`;
+            elCameraCheckFeedback.textContent = ` ${data.message}`;
           }
         }
       } catch (err) {
@@ -1769,7 +1910,7 @@
         }
       } finally {
         elBtnCheckCamera.disabled = false;
-        elBtnCheckCamera.innerHTML = "<span>🔍</span> Kiểm tra Camera";
+        elBtnCheckCamera.innerHTML = "Kiểm tra Camera";
       }
     });
   }
@@ -1811,7 +1952,7 @@
     if (!elTelegramFeedback) return;
     elTelegramFeedback.style.display = "block";
     elTelegramFeedback.className = `settings-feedback ${ok ? "feedback-success" : "feedback-error"}`;
-    elTelegramFeedback.textContent = `${ok ? "✓" : "⚠"} ${message}`;
+    elTelegramFeedback.textContent = message;
   }
 
   function updateTelegramPill(settings) {
@@ -1859,7 +2000,7 @@
     if (!button) return;
     const original = button.innerHTML;
     button.disabled = true;
-    button.innerHTML = `<span>⏳</span> ${busyLabel}`;
+    button.innerHTML = `${busyLabel}`;
     try {
       await action();
     } catch (err) {
@@ -2026,7 +2167,7 @@
     if (!elExtraCamFeedback) return;
     if (extraCamFeedbackTimer) clearTimeout(extraCamFeedbackTimer);
     elExtraCamFeedback.className = `cam-toast-feedback toast-${type}`;
-    elExtraCamFeedback.innerHTML = `<span>${type === "success" ? "✅" : (type === "error" ? "❌" : "ℹ️")}</span> <span>${escapeHtml(msg)}</span>`;
+    elExtraCamFeedback.textContent = msg;
     elExtraCamFeedback.style.display = "flex";
     if (duration > 0) {
       extraCamFeedbackTimer = setTimeout(() => { elExtraCamFeedback.style.display = "none"; }, duration);
@@ -2045,7 +2186,7 @@
       <div class="extra-cam-footer">
         <span class="extra-cam-name" title="${escapeHtml(cam.name)}">${escapeHtml(cam.name)}</span>
         <span class="extra-cam-meta"></span>
-        <button type="button" class="btn-extra-cam-remove" title="Xóa camera này">🗑️ Xóa</button>
+        <button type="button" class="btn-extra-cam-remove" title="Xóa camera này"> Xóa</button>
       </div>
     `;
     const entry = {
@@ -2100,7 +2241,7 @@
     if (box && box.requestFullscreen) box.requestFullscreen().catch(() => {});
   }
 
-  // One row per camera: the main camera (changed in the ⋯ menu) and every added camera (view / delete)
+  // One row per camera: the main camera (changed in the Camera menu) and every added camera (view / delete)
   function renderCameraList(primary, cameras) {
     if (!elCamList) return;
     const rows = [];
@@ -2139,7 +2280,7 @@
         const delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "btn-extra-cam-remove";
-        delBtn.textContent = "🗑️ Xóa";
+        delBtn.textContent = " Xóa";
         delBtn.addEventListener("click", () => removeExtraCamera(row.id, row.name));
         actions.appendChild(delBtn);
       }
@@ -2254,7 +2395,7 @@
         return;
       }
       elBtnExtraCamTest.disabled = true;
-      elBtnExtraCamTest.textContent = "⏳ Đang thử...";
+      elBtnExtraCamTest.textContent = " Đang thử...";
       showExtraCamFeedback("Đang thử kết nối tới camera (tối đa ~10 giây với camera ở xa)...", "info", 0);
       try {
         const res = await apiFetch(`${API_BASE}/camera/test`, {
@@ -2264,7 +2405,7 @@
         });
         const data = await res.json();
         if (res.ok && data.ok) showExtraCamFeedback(`${data.message} (kết nối mất ${data.connect_ms} ms)`, "success", 6000);
-        else showExtraCamFeedback([data.message || data.detail || "Không kết nối được camera.", data.hint].filter(Boolean).join(" 👉 "), "error", 15000);
+        else showExtraCamFeedback([data.message || data.detail || "Không kết nối được camera.", data.hint].filter(Boolean).join("  "), "error", 15000);
       } catch (e) {
         showExtraCamFeedback("Lỗi kết nối tới Backend API: " + e.message, "error");
       } finally {
@@ -2287,7 +2428,7 @@
         return;
       }
       elBtnExtraCamAdd.disabled = true;
-      elBtnExtraCamAdd.textContent = "⏳ ĐANG THÊM...";
+      elBtnExtraCamAdd.textContent = " ĐANG THÊM...";
       try {
         const res = await apiFetch(`${API_BASE}/api/cameras`, {
           method: "POST",
@@ -2334,6 +2475,7 @@
       elVideoStream.src = buildMjpegUrl();
     }
 
+    fetchFpsSetting();
     connectAlertsWebSocket();
     fetchHistoricalEvents();
     fetchCameraDevices();

@@ -14,10 +14,10 @@ class SyntheticCameraStream(CameraStream):
         self,
         width: int = 1280,
         height: int = 720,
-        fps: int = 30,
+        fps: int = 15,
         max_queue_size: int = 2,
     ) -> None:
-        super().__init__(max_queue_size=max_queue_size)
+        super().__init__(max_queue_size=max_queue_size, target_fps=float(fps))
         self.target_width = width
         self.target_height = height
         self.target_fps = fps
@@ -69,6 +69,10 @@ class SyntheticCameraStream(CameraStream):
 
     def _close_capture(self) -> None:
         pass
+
+    def set_fps(self, fps: float) -> None:
+        super().set_fps(fps)
+        self.target_fps = int(fps)
 
     def get_fps(self) -> float:
         return float(self.target_fps)

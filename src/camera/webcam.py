@@ -30,14 +30,14 @@ class WebcamStream(CameraStream):
         device_index: int = 0,
         width: int = 1280,
         height: int = 720,
-        fps: int = 30,
+        fps: int = 15,
         api_preference: str = "default",
         max_queue_size: int = 2,
         warmup_seconds: Optional[float] = None,
         reopen_after_seconds: Optional[float] = None,
         max_reconnect_delay_seconds: Optional[float] = None,
     ) -> None:
-        super().__init__(max_queue_size=max_queue_size)
+        super().__init__(max_queue_size=max_queue_size, target_fps=float(fps))
         self.device_index = device_index
         self.target_width = width
         self.target_height = height
@@ -174,9 +174,16 @@ class WebcamStream(CameraStream):
             "last_error": self.last_error,
         }
 
-    def get_fps(self) -> float:
+    def set_fps(self, fps: float) -> None:
+        super().set_fps(fps)
+        self.target_fps = int(fps)
         if self._cap and self._cap.isOpened():
-            return float(self._cap.get(cv2.CAP_PROP_FPS)) or float(self.target_fps)
+            try:
+                self._cap.set(cv2.CAP_PROP_FPS, float(fps))
+            except Exception:
+                pass
+
+    def get_fps(self) -> float:
         return float(self.target_fps)
 
     def get_resolution(self) -> Tuple[int, int]:

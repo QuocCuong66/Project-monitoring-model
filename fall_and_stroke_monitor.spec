@@ -30,7 +30,8 @@ for rel in REQUIRED_MODELS:
         raise SystemExit(f'[BUILD] Thiếu mô hình bắt buộc: {rel}')
 
 datas = [
-    (str(project_root / 'configs'), 'configs'),
+    # TLS certificates/private keys are generated locally, never shipped.
+    *[(str(path), 'configs') for path in sorted((project_root / 'configs').glob('*.yaml'))],
     (str(project_root / 'frontend'), 'frontend'),
     (str(project_root / 'app_icon.ico'), '.'),
     (str(project_root / 'app_icon.png'), '.'),

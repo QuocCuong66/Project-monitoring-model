@@ -28,6 +28,25 @@ def test_shipped_config_shows_lying_as_safe_and_monitors_sitting_collapses() -> 
     th = ThresholdManager()
     assert th.safe_when_lying
     assert {"collapse_from_sitting", "convulsion", "fast_drop", "upright_to_floor"} <= set(th.fall_onset_reasons)
+    assert "roll_off_drop" in th.fall_onset_reasons
+
+
+def test_roll_off_from_an_already_lying_episode_is_not_suppressed_as_safe() -> None:
+    s = ScopeScene()
+    # Start tracked while lying, then simulate the hips moving more than one torso length
+    # below the original bed height. Later pose estimates may make the instantaneous cue vanish.
+    for _ in range(18):
+        s.step(_kp(LYING), 85.0, "immobile", center=(640.0, 500.0))
+    s.step(_kp(LYING), 85.0, "falling", vy=2.0, drop=0.9, immob=0.2, center=(640.0, 640.0))
+    context = s.engine.lying_analyzer._tracks[1].episode
+    assert context.onset == "sudden"
+    assert context.reason == "roll_off_drop"
+
+    # Once the same movement stops, the persistent episode evidence must still pass scope filtering.
+    s.lie_still(2.0)
+    assessment = s.engine.assessments[1]
+    assert not assessment.evidence.get("monitoring_safe", False)
+    assert assessment.risk_score > 0.0
 
 
 def test_person_already_lying_when_tracking_starts_is_safe() -> None:
@@ -36,6 +55,45 @@ def test_person_already_lying_when_tracking_starts_is_safe() -> None:
     assert not s.fired
     assert s.shown[-1] == SAFE_LABEL
     assert max(s.risks) == 0.0
+
+
+def test_initial_noisy_velocity_while_already_lying_is_not_a_fall() -> None:
+    s = ScopeScene()
+    s.step(_kp(LYING), 85.0, "falling", vy=3.0, drop=0.9)
+    s.lie_still(8.0)
+    assert not s.fired
+    assert s.shown[-1] == SAFE_LABEL
+
+
+def test_brief_upright_pose_flicker_during_sleep_keeps_lying_history() -> None:
+    s = ScopeScene()
+    s.lie_still(3.0)
+    episode = s.engine.lying_analyzer._tracks[1].episode
+    # During a roll the pose estimator briefly hallucinates an upright skeleton.
+    s.run(0.2, lambda _: s.step(_kp(UPRIGHT), 5.0, "standing"))
+    s.step(_kp(LYING), 85.0, "falling", vy=2.0, drop=0.8, immob=0.0)
+    s.lie_still(8.0)
+    assert s.engine.lying_analyzer._tracks[1].episode is episode
+    assert not s.fired
+    assert s.shown[-1] == SAFE_LABEL
+
+
+def test_initial_single_upright_estimate_is_not_standing_history() -> None:
+    s = ScopeScene()
+    s.step(_kp(UPRIGHT), 5.0, "standing")
+    s.step(_kp(LYING), 85.0, "falling", vy=3.0, drop=0.9)
+    s.lie_still(8.0)
+    assert not s.fired
+    assert s.shown[-1] == SAFE_LABEL
+
+
+def test_getting_up_fully_then_falling_still_alarms() -> None:
+    s = ScopeScene()
+    s.lie_still(3.0)
+    s.stand(3.0)
+    s.collapse()
+    s.lie_still(10.0)
+    assert "fall" in s.fired
 
 
 def test_lying_down_deliberately_is_safe() -> None:

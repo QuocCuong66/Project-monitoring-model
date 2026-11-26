@@ -348,11 +348,12 @@ def run_app():
                 "rtsp_url": rtsp_url,
                 "video_path": video_path,
                 "name": cam_name,
+                "fps": int(stream.get_fps()),
             })
     except Exception as e:
         print(f"[Warning] Lỗi khởi tạo camera thực tế, chuyển sang Synthetic: {e}")
         from src.camera.synthetic import SyntheticCameraStream
-        stream = SyntheticCameraStream(width=1280, height=720, fps=30)
+        stream = SyntheticCameraStream(width=1280, height=720, fps=15)
         stream.start()
         with srv.state_lock:
             srv.camera_stream = stream
